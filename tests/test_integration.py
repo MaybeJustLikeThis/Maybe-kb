@@ -55,13 +55,19 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return tmp_path
 
 
-def test_full_workflow(project: Path):
+@pytest.fixture
+def db(project: Path):
+    """Yield an initialized Database, ensuring it is always closed."""
+    database = Database(project / ".kb" / "kb.db")
+    database.initialize()
+    yield database
+    database.close()
+
+
+def test_full_workflow(project: Path, db: Database):
     """Full init -> index -> search -> list workflow."""
     result = runner.invoke(app, ["init", "--import-existing"])
     assert result.exit_code == 0
-
-    db = Database(project / ".kb" / "kb.db")
-    db.initialize()
 
     all_hashes = db.get_all_hashes()
     assert len(all_hashes) == 2
@@ -79,15 +85,10 @@ def test_full_workflow(project: Path):
     assert note.extra_frontmatter["abbrlink"] == "917b0383"
     assert note.tags == ["杂谈"]
 
-    db.close()
 
-
-def test_incremental_index(project: Path):
+def test_incremental_index(project: Path, db: Database):
     """Second index run only processes changed files."""
     runner.invoke(app, ["init", "--import-existing"])
-
-    db = Database(project / ".kb" / "kb.db")
-    db.initialize()
 
     vue_file = project / "notes" / "tech" / "vue-state.md"
     content = vue_file.read_text(encoding="utf-8")
@@ -96,5 +97,3 @@ def test_incremental_index(project: Path):
     from kb.cli import _index_files
     count = _index_files(project, db, full=False)
     assert count == 1
-
-    db.close()
