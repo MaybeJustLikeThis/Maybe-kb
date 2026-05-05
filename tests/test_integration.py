@@ -5,6 +5,9 @@ from typer.testing import CliRunner
 from kb.cli import app
 from kb.storage import parse_markdown_file
 from kb.indexer import Database
+from kb.server import create_app
+from kb.config import load_config
+from fastapi.testclient import TestClient
 
 runner = CliRunner()
 
@@ -97,3 +100,47 @@ def test_incremental_index(project: Path, db: Database):
     from kb.cli import _index_files
     count = _index_files(project, db, full=False)
     assert count == 1
+
+
+def test_web_ui_full_workflow(project: Path):
+    """Full Web UI workflow: create -> list -> search -> update -> delete."""
+    runner.invoke(app, ["init"])
+    config = load_config(project)
+    web_app = create_app(config)
+    client = TestClient(web_app)
+
+    # Create notes
+    r = client.post("/api/notes", json={
+        "title": "Web Test",
+        "content": "# Hello\n\nWorld",
+        "category": "tech",
+        "tags": ["test"],
+    })
+    assert r.status_code == 200
+    file_id = r.json()["file_id"]
+
+    # List
+    r = client.get("/api/notes")
+    assert r.status_code == 200
+    assert len(r.json()) >= 1
+
+    # Search
+    r = client.get("/api/search", params={"q": "Hello"})
+    assert r.status_code == 200
+    assert len(r.json()) >= 1
+
+    # Get
+    r = client.get(f"/api/notes/{file_id}")
+    assert r.status_code == 200
+
+    # Update
+    r = client.put(f"/api/notes/{file_id}", json={"title": "Updated Title"})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Updated Title"
+
+    # Delete
+    r = client.delete(f"/api/notes/{file_id}")
+    assert r.status_code == 200
+
+    r = client.get(f"/api/notes/{file_id}")
+    assert r.status_code == 404
