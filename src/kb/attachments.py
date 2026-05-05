@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
 from pathlib import Path
 
 ATTACHMENTS_DIR = "attachments"
