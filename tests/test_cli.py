@@ -102,3 +102,22 @@ def test_kb_tag_add(kb_dir: Path):
 
     content = notes[0].read_text(encoding="utf-8")
     assert "fastapi" in content
+
+
+def test_kb_edit_file_not_found(kb_dir: Path):
+    """kb edit exits with error if file doesn't exist."""
+    result = runner.invoke(app, ["edit", "nonexistent.md"])
+    assert result.exit_code == 1
+
+
+def test_kb_add_no_collision(kb_dir: Path):
+    """kb add with duplicate title gets unique filename."""
+    runner.invoke(app, ["init"])
+    runner.invoke(app, ["add", "Same Title"])
+    runner.invoke(app, ["add", "Same Title"])
+
+    notes = sorted((kb_dir / "notes").rglob("*.md"))
+    assert len(notes) == 2
+    names = {n.name for n in notes}
+    assert "same-title.md" in names
+    assert "same-title-2.md" in names

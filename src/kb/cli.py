@@ -1,6 +1,8 @@
 """CLI entry point for kb."""
 from __future__ import annotations
 
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -99,6 +101,18 @@ def add_note(
     # All notes live under notes/ directory
     file_path = f"notes/{cat}/{slug}.md" if cat else f"notes/{slug}.md"
 
+    # Avoid slug collisions by appending numeric suffix
+    full_path = vault / file_path
+    counter = 2
+    while full_path.exists():
+        suffix = f"-{counter}"
+        if cat:
+            file_path = f"notes/{cat}/{slug}{suffix}.md"
+        else:
+            file_path = f"notes/{slug}{suffix}.md"
+        full_path = vault / file_path
+        counter += 1
+
     note = Note(
         file_id=file_path,
         title=title,
@@ -110,7 +124,6 @@ def add_note(
         updated_at=now,
     )
 
-    full_path = vault / file_path
     write_markdown_file(full_path, note)
 
     # Auto-index the new note
@@ -215,6 +228,26 @@ def delete(
     db.close()
 
     console.print(f"[green]Deleted: {file_path}[/green]")
+
+
+@app.command()
+def edit(
+    file_path: str = typer.Argument(help="Note file path (relative to vault)"),
+):
+    """Open a note in the system's default editor."""
+    vault = Path.cwd()
+    full_path = vault / file_path
+
+    if not full_path.exists():
+        console.print(f"[red]File not found: {file_path}[/red]")
+        raise typer.Exit(1)
+
+    if sys.platform == "win32":
+        subprocess.run(["start", str(full_path)], shell=True, check=False)
+    elif sys.platform == "darwin":
+        subprocess.run(["open", str(full_path)], check=False)
+    else:
+        subprocess.run(["xdg-open", str(full_path)], check=False)
 
 
 @app.command()
