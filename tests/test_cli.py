@@ -121,3 +121,11 @@ def test_kb_add_no_collision(kb_dir: Path):
     names = {n.name for n in notes}
     assert "same-title.md" in names
     assert "same-title-2.md" in names
+
+
+def test_kb_serve_help(kb_dir: Path):
+    """kb serve has --help."""
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.output
+    assert "--port" in result.output

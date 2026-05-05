@@ -12,6 +12,7 @@ from rich.table import Table
 
 from kb.indexer import Database
 from kb.models import Note
+from kb.config import load_config
 from kb.storage import discover_notes, parse_markdown_file, write_markdown_file
 
 app = typer.Typer(help="Local knowledge base CLI")
@@ -248,6 +249,26 @@ def edit(
         subprocess.run(["open", str(full_path)], check=False)
     else:
         subprocess.run(["xdg-open", str(full_path)], check=False)
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", help="Server host"),
+    port: int = typer.Option(8420, help="Server port"),
+):
+    """Start the web UI server."""
+    import uvicorn
+    vault = Path.cwd()
+    config = load_config(vault)
+
+    host = host or config.server.host
+    port = port or config.server.port
+
+    from kb.server import create_app
+    web_app = create_app(config)
+
+    console.print(f"[green]Starting kb server at http://{host}:{port}[/green]")
+    uvicorn.run(web_app, host=host, port=port, log_level="info")
 
 
 @app.command()
