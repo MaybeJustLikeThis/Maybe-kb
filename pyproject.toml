@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kb"
+version = "0.1.0"
+description = "Local knowledge base with full-text search"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9",
+    "pyyaml>=6.0",
+    "jieba>=0.42",
+    "rich>=13.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+kb = "kb.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kb"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

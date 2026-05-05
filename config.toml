@@ -1,0 +1,17 @@
+[general]
+vault_path = "."
+
+[search]
+max_results = 20
+
+[embedding]
+provider = "local"
+model = "BGE-small-zh"
+
+[llm]
+provider = "ollama"
+model = "qwen2.5:7b"
+
+[server]
+host = "127.0.0.1"
+port = 8420
