@@ -9,7 +9,7 @@ import SearchPage from './pages/SearchPage.vue'
 
 const routes = [
   { path: '/', component: NoteList },
-  { path: '/note/:fileId+', component: NoteDetail, props: true },
+  { path: '/note/:fileId', component: NoteDetail, props: true },
   { path: '/search', component: SearchPage },
 ]
 
