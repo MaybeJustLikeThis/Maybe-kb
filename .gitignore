@@ -7,3 +7,5 @@ dist/
 build/
 .venv/
 .coverage
+node_modules/
+web/dist/
