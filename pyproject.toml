@@ -13,6 +13,9 @@ dependencies = [
     "jieba>=0.42",
     "rich>=13.0",
     "pydantic>=2.0",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.22",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
