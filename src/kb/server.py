@@ -262,4 +262,26 @@ def create_app(kb_config: KBConfig) -> FastAPI:
         finally:
             db.close()
 
+    # Serve frontend static files (production mode — built files in web/dist/)
+    static_dir = Path(__file__).parent.parent.parent / "web" / "dist"
+    if static_dir.exists() and (static_dir / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+
+        @app.get("/{full_path:path}")
+        async def serve_frontend(full_path: str):
+            """Serve frontend SPA — fallback to index.html for client-side routing."""
+            file_path = static_dir / full_path
+            if file_path.is_file() and not full_path.startswith("api"):
+                from fastapi.responses import FileResponse
+                return FileResponse(file_path)
+            index_path = static_dir / "index.html"
+            if index_path.exists():
+                from fastapi.responses import FileResponse
+                return FileResponse(index_path)
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(
+                "Frontend not built. Run: cd web && npm run build",
+                status_code=404,
+            )
+
     return app
