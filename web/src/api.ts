@@ -74,4 +74,12 @@ export const api = {
   triggerIndex() {
     return request<{ indexed: number }>('/index', { method: 'POST' })
   },
+
+  chatAsk(query: string, top_k?: number) {
+    return request<{ answer: string; model: string; tokens_used: number }>('/chat/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, top_k: top_k ?? 5 }),
+    })
+  },
 }

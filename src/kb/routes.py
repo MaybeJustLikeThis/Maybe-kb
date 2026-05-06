@@ -1,17 +1,22 @@
 """API routes for kb Web UI."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from kb.data.database import Database
+from kb.core.config import EmbeddingConfig, LLMConfig
 from kb.core.models import Note
+from kb.core.rag import rag_query, rag_query_stream
+from kb.core.search import hybrid_search
 from kb.core import services
 from kb.data.attachments import store_attachment
-from kb.core.config import EmbeddingConfig
+from kb.data.database import Database
 from kb.data.embedding import create_embedding_provider
+from kb.data.llm import create_llm_provider
 from kb.data.vector import VectorStore
 
 
@@ -43,6 +48,11 @@ class NoteUpdate(BaseModel):
     tags: list[str] | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=500)
     status: str | None = Field(default=None, max_length=20)
+
+
+class ChatRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    top_k: int = Field(default=5, ge=1, le=20)
 
 
 def _note_to_response(note: Note) -> NoteResponse:
@@ -89,6 +99,7 @@ def create_api_router(
     vault_path: Path,
     db_path: Path,
     embedding_config: EmbeddingConfig | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> APIRouter:
     """Create an APIRouter with all API endpoints."""
     router = APIRouter()
@@ -163,7 +174,6 @@ def create_api_router(
         mode: str = Query("fts5"),
     ):
         if mode == "hybrid" and embedding_config is not None:
-            from kb.core.search import hybrid_search
             provider = create_embedding_provider(embedding_config)
             store = VectorStore(vault_path / ".kb" / "vectors.lance")
             try:
@@ -234,5 +244,40 @@ def create_api_router(
         provider = create_embedding_provider(embedding_config) if embedding_config else None
         count, vec_count = _index_files(vault_path, db, full=True, embedding_provider=provider)
         return {"indexed": count, "vectors": vec_count}
+
+    @router.post("/chat/ask")
+    def chat_ask(body: ChatRequest):
+        if llm_config is None or embedding_config is None:
+            raise HTTPException(status_code=400, detail="LLM and embedding config required")
+
+        db = get_db()
+        provider = create_embedding_provider(embedding_config)
+        llm = create_llm_provider(llm_config)
+        store = VectorStore(vault_path / ".kb" / "vectors.lance")
+        try:
+            response = rag_query(body.query, db, provider, store, llm, top_k=body.top_k)
+        finally:
+            store.close()
+        return {"answer": response.text, "model": response.model, "tokens_used": response.tokens_used}
+
+    @router.post("/chat")
+    async def chat_stream(body: ChatRequest):
+        if llm_config is None or embedding_config is None:
+            raise HTTPException(status_code=400, detail="LLM and embedding config required")
+
+        db = get_db()
+        provider = create_embedding_provider(embedding_config)
+        llm = create_llm_provider(llm_config)
+        store = VectorStore(vault_path / ".kb" / "vectors.lance")
+
+        async def generate():
+            try:
+                for chunk in rag_query_stream(body.query, db, provider, store, llm, top_k=body.top_k):
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
+            finally:
+                store.close()
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
 
     return router

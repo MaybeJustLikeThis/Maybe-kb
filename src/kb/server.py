@@ -29,7 +29,7 @@ def create_app(kb_config: KBConfig) -> FastAPI:
     vault_path = kb_config.vault_path
     db_path = vault_path / ".kb" / "kb.db"
 
-    router = create_api_router(vault_path, db_path, kb_config.embedding)
+    router = create_api_router(vault_path, db_path, kb_config.embedding, kb_config.llm)
     app.include_router(router, prefix="/api")
 
     # Serve frontend static files (production mode — built files in web/dist/)

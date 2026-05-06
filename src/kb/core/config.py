@@ -27,6 +27,12 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class RAGConfig:
+    top_k: int = 5
+    truncate_chars: int = 800
+
+
+@dataclass(frozen=True)
 class ServerConfig:
     host: str = "127.0.0.1"
     port: int = 8420
@@ -38,6 +44,7 @@ class KBConfig:
     search: SearchConfig = field(default_factory=SearchConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    rag: RAGConfig = field(default_factory=RAGConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
 
 
@@ -55,6 +62,7 @@ def load_config(base_path: Path) -> KBConfig:
     search_data = data.get("search", {})
     embedding_data = data.get("embedding", {})
     llm_data = data.get("llm", {})
+    rag_data = data.get("rag", {})
     server_data = data.get("server", {})
 
     vault_rel = general.get("vault_path", ".")
@@ -72,6 +80,9 @@ def load_config(base_path: Path) -> KBConfig:
             provider=llm_data.get("provider", "ollama"),
             model=llm_data.get("model", "qwen2.5:7b"),
             api_key_env=llm_data.get("api_key_env"),
+        ),
+        rag=RAGConfig(
+            top_k=rag_data.get("top_k", 5),
         ),
         server=ServerConfig(
             host=server_data.get("host", "127.0.0.1"),

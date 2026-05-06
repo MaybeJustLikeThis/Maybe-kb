@@ -24,7 +24,7 @@ def _tokenize(text: str) -> str:
 
 def _sanitize_fts5_query(query: str) -> str:
     """Remove FTS5 special characters to prevent query injection."""
-    return query.replace('*', '').replace('"', '').replace('(', '').replace(')', '')
+    return query.replace('*', '').replace('"', '').replace('(', '').replace(')', '').replace('?', '')
 
 
 class Database:

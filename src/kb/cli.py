@@ -89,7 +89,21 @@ def init(
     )
     if not (path / "config.toml").exists():
         (path / "config.toml").write_text(
-            '[general]\nvault_path = "."\n\n[search]\nmax_results = 20\n',
+            '[general]\n'
+            'vault_path = "."\n\n'
+            '[search]\n'
+            'max_results = 20\n\n'
+            '[embedding]\n'
+            'provider = "local"\n'
+            'model = "BAAI/bge-small-zh-v1.5"\n\n'
+            '[llm]\n'
+            'provider = "ollama"\n'
+            'model = "qwen2.5:7b"\n\n'
+            '[rag]\n'
+            'top_k = 5\n\n'
+            '[server]\n'
+            'host = "127.0.0.1"\n'
+            'port = 8420\n',
             encoding="utf-8",
         )
 
@@ -308,6 +322,39 @@ def tag(
     db.close()
 
     console.print(f"[green]Updated tags: {saved.tags}[/green]")
+
+
+@app.command()
+def ask(
+    query: str = typer.Argument(help="Question to ask your knowledge base"),
+    top_k: int = typer.Option(5, help="Number of search results to include"),
+    stream: bool = typer.Option(False, "--stream", "-s", help="Stream the response"),
+):
+    """Ask a question using RAG over your knowledge base."""
+    vault = Path.cwd()
+    config = load_config(vault)
+
+    from kb.core.rag import rag_query, rag_query_stream
+    from kb.data.llm import create_llm_provider
+    from kb.data.vector import VectorStore
+
+    db = _get_db()
+    provider = create_embedding_provider(config.embedding)
+    llm = create_llm_provider(config.llm)
+    store = VectorStore(vault / ".kb" / "vectors.lance")
+
+    try:
+        if stream:
+            for chunk in rag_query_stream(query, db, provider, store, llm, top_k=top_k):
+                console.print(chunk.text, end="")
+            console.print()
+        else:
+            with console.status("[bold green]Thinking..."):
+                response = rag_query(query, db, provider, store, llm, top_k=top_k)
+            console.print(response.text)
+    finally:
+        store.close()
+        db.close()
 
 
 @app.command()

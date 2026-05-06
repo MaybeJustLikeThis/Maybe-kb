@@ -4,10 +4,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from kb.core.config import KBConfig
+from kb.core.rag import rag_query
+from kb.core.search import hybrid_search
+from kb.core import services
 from kb.data.database import Database
 from kb.data.embedding import create_embedding_provider
+from kb.data.llm import create_llm_provider
 from kb.data.vector import VectorStore
-from kb.core import services
 
 
 def create_mcp_server(config: KBConfig):
@@ -63,7 +66,6 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
-        from kb.core.search import hybrid_search
         db = get_db()
         store = VectorStore(vault / ".kb" / "vectors.lance")
         try:
@@ -124,6 +126,22 @@ def create_mcp_server(config: KBConfig):
             "file_id": note.file_id,
             "title": note.title,
             "content": note.content,
+        }
+
+    @mcp.tool()
+    def kb_rag_query(query: str, top_k: int = 5) -> dict:
+        """RAG query: hybrid search + LLM answer over your knowledge base."""
+        llm = create_llm_provider(config.llm)
+        db = get_db()
+        store = VectorStore(vault / ".kb" / "vectors.lance")
+        try:
+            response = rag_query(query, db, provider, store, llm, top_k=top_k)
+        finally:
+            store.close()
+        return {
+            "answer": response.text,
+            "model": response.model,
+            "tokens_used": response.tokens_used,
         }
 
     return mcp
