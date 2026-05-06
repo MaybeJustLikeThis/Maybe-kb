@@ -1,6 +1,6 @@
 """Tests for hybrid search with RRF."""
 import pytest
-from kb.search import SearchResult, hybrid_search
+from kb.core.search import SearchResult, hybrid_search
 
 
 def test_search_result_fields():
@@ -17,10 +17,10 @@ def test_rrf_score_decreases_with_rank():
 
 def test_hybrid_search_both_sources(tmp_path):
     """Hybrid search fuses FTS5 and semantic results."""
-    from kb.indexer import Database
-    from kb.models import Note
-    from kb.embedding import LocalEmbeddingProvider
-    from kb.vector import VectorStore, VectorRecord
+    from kb.data.database import Database
+    from kb.core.models import Note
+    from kb.data.embedding import LocalEmbeddingProvider
+    from kb.data.vector import VectorStore, VectorRecord
 
     db = Database(tmp_path / ".kb" / "kb.db")
     db.initialize()
@@ -55,9 +55,9 @@ def test_hybrid_search_both_sources(tmp_path):
 
 def test_hybrid_search_empty_both(tmp_path):
     """Both searches empty returns empty list."""
-    from kb.indexer import Database
-    from kb.embedding import LocalEmbeddingProvider
-    from kb.vector import VectorStore
+    from kb.data.database import Database
+    from kb.data.embedding import LocalEmbeddingProvider
+    from kb.data.vector import VectorStore
 
     db = Database(tmp_path / ".kb" / "kb.db")
     db.initialize()

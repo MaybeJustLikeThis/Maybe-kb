@@ -15,14 +15,14 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from kb.models import Note
-from kb.storage import (
+from kb.core.models import Note
+from kb.data.storage import (
     make_slug,
     parse_markdown_file,
     validate_vault_path,
     write_markdown_file,
 )
-from kb.indexer import Database
+from kb.data.database import Database
 
 
 def resolve_note(vault_path: Path, file_id: str) -> tuple[Path, Note]:

@@ -10,11 +10,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from kb.indexer import Database, _index_vectors
-from kb.config import load_config
-from kb.embedding import create_embedding_provider
-from kb.storage import discover_notes, parse_markdown_file, validate_vault_path
-from kb import services
+from kb.data.database import Database, _index_vectors
+from kb.core.config import load_config
+from kb.data.embedding import create_embedding_provider
+from kb.data.storage import discover_notes, parse_markdown_file, validate_vault_path
+from kb.core import services
 
 app = typer.Typer(help="Local knowledge base CLI")
 console = Console()

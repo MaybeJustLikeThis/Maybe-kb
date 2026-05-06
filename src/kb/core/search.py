@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from kb.indexer import Database
-from kb.embedding import EmbeddingProvider
-from kb.vector import VectorStore
+from kb.data.database import Database
+from kb.data.embedding import EmbeddingProvider
+from kb.data.vector import VectorStore
 
 
 @dataclass(frozen=True)

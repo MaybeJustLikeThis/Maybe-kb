@@ -4,7 +4,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from kb.config import EmbeddingConfig
+from kb.core.config import EmbeddingConfig
 
 
 @dataclass(frozen=True)

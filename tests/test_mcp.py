@@ -1,7 +1,7 @@
 """Tests for MCP server."""
 import pytest
 from pathlib import Path
-from kb.config import KBConfig, EmbeddingConfig
+from kb.core.config import KBConfig, EmbeddingConfig
 
 
 def test_create_mcp_server_returns_fastmcp():

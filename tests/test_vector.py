@@ -1,7 +1,7 @@
 """Tests for LanceDB vector store."""
 import pytest
 from pathlib import Path
-from kb.vector import VectorStore, VectorRecord
+from kb.data.vector import VectorStore, VectorRecord
 
 
 def test_vector_store_creates_table_on_first_upsert(tmp_path: Path):

@@ -1,14 +1,14 @@
 """Tests for shared CRUD service functions."""
 import pytest
 from pathlib import Path
-from kb.services import (
+from kb.core.services import (
     resolve_note,
     save_note_file,
     create_note,
     update_note,
     delete_note,
 )
-from kb.indexer import Database
+from kb.data.database import Database
 
 
 def test_create_note_writes_file_and_indexes(tmp_path: Path):

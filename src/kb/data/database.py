@@ -7,9 +7,9 @@ from typing import Any
 
 import jieba
 
-from kb.models import Note
-from kb.storage import chunk_text
-from kb.vector import VectorStore, VectorRecord
+from kb.core.models import Note
+from kb.data.storage import chunk_text
+from kb.data.vector import VectorStore, VectorRecord
 
 # Suppress jieba startup logs
 jieba.setLogLevel(20)
@@ -267,7 +267,7 @@ def _index_vectors(
     but had vectors in the store.
     Returns number of vector records indexed.
     """
-    from kb.embedding import EmbeddingProvider as _EP
+    from kb.data.embedding import EmbeddingProvider as _EP
 
     store = VectorStore(vault / ".kb" / "vectors.lance")
     indexed = 0

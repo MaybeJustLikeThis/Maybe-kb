@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
 from kb.server import create_app
-from kb.config import KBConfig, ServerConfig
+from kb.core.config import KBConfig, ServerConfig
 
 
 @pytest.fixture
@@ -252,8 +252,8 @@ def test_semantic_search_empty_store(client):
 
 def test_semantic_search_finds_similar(client):
     """Semantic search returns notes after vectors are populated."""
-    from kb.vector import VectorStore, VectorRecord
-    from kb.embedding import LocalEmbeddingProvider
+    from kb.data.vector import VectorStore, VectorRecord
+    from kb.data.embedding import LocalEmbeddingProvider
 
     resp1 = client.post("/api/notes", json={
         "title": "Python Async", "content": "asyncio 协程并发编程",

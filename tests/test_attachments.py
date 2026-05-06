@@ -1,7 +1,7 @@
 """Tests for attachment management."""
 import pytest
 from pathlib import Path
-from kb.attachments import store_attachment
+from kb.data.attachments import store_attachment
 
 
 def test_store_attachment(tmp_path: Path):

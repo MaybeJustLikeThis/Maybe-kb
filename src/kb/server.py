@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from kb.config import KBConfig
+from kb.core.config import KBConfig
 from kb.routes import create_api_router
 
 

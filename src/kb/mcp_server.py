@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kb.config import KBConfig
-from kb.indexer import Database
-from kb.embedding import create_embedding_provider
-from kb.vector import VectorStore
-from kb import services
+from kb.core.config import KBConfig
+from kb.data.database import Database
+from kb.data.embedding import create_embedding_provider
+from kb.data.vector import VectorStore
+from kb.core import services
 
 
 def create_mcp_server(config: KBConfig):
@@ -63,7 +63,7 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
-        from kb.search import hybrid_search
+        from kb.core.search import hybrid_search
         db = get_db()
         store = VectorStore(vault / ".kb" / "vectors.lance")
         try:

@@ -1,12 +1,12 @@
 """Tests for embedding provider abstraction."""
 import pytest
-from kb.embedding import (
+from kb.data.embedding import (
     EmbeddingResult,
     EmbeddingProvider,
     LocalEmbeddingProvider,
     create_embedding_provider,
 )
-from kb.config import EmbeddingConfig
+from kb.core.config import EmbeddingConfig
 
 
 def test_embed_result_fields():
@@ -47,7 +47,7 @@ def test_create_provider_local_default():
 
 def test_openai_provider_http_error(monkeypatch: pytest.MonkeyPatch):
     """OpenAI provider wraps HTTP errors as RuntimeError."""
-    from kb.embedding import OpenAIEmbeddingProvider
+    from kb.data.embedding import OpenAIEmbeddingProvider
     import urllib.error
     import io
 
@@ -67,7 +67,7 @@ def test_openai_provider_http_error(monkeypatch: pytest.MonkeyPatch):
 
 def test_openai_provider_connection_error(monkeypatch: pytest.MonkeyPatch):
     """OpenAI provider wraps URL errors as RuntimeError."""
-    from kb.embedding import OpenAIEmbeddingProvider
+    from kb.data.embedding import OpenAIEmbeddingProvider
     import urllib.error
 
     provider = OpenAIEmbeddingProvider(api_key="sk-test", model="text-embedding-3-small")

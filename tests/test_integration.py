@@ -3,10 +3,10 @@ import pytest
 from pathlib import Path
 from typer.testing import CliRunner
 from kb.cli import app
-from kb.storage import parse_markdown_file
-from kb.indexer import Database
+from kb.data.storage import parse_markdown_file
+from kb.data.database import Database
 from kb.server import create_app
-from kb.config import load_config
+from kb.core.config import load_config
 from fastapi.testclient import TestClient
 
 runner = CliRunner()

@@ -1,7 +1,7 @@
 """Tests for Markdown storage layer."""
 import pytest
 from pathlib import Path
-from kb.storage import parse_markdown_file, write_markdown_file, chunk_text
+from kb.data.storage import parse_markdown_file, write_markdown_file, chunk_text
 
 
 SAMPLE_MARKDOWN = """\
@@ -94,7 +94,7 @@ def test_write_and_roundtrip(tmp_path: Path):
 
 def test_write_new_note(tmp_path: Path):
     """write_markdown_file creates file with frontmatter + content."""
-    from kb.models import Note
+    from kb.core.models import Note
 
     note = Note(
         file_id="tech/new.md",

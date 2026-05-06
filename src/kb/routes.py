@@ -6,13 +6,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field
 
-from kb.indexer import Database
-from kb.models import Note
-from kb import services
-from kb.attachments import store_attachment
-from kb.config import EmbeddingConfig
-from kb.embedding import create_embedding_provider
-from kb.vector import VectorStore
+from kb.data.database import Database
+from kb.core.models import Note
+from kb.core import services
+from kb.data.attachments import store_attachment
+from kb.core.config import EmbeddingConfig
+from kb.data.embedding import create_embedding_provider
+from kb.data.vector import VectorStore
 
 
 class NoteResponse(BaseModel):
@@ -163,7 +163,7 @@ def create_api_router(
         mode: str = Query("fts5"),
     ):
         if mode == "hybrid" and embedding_config is not None:
-            from kb.search import hybrid_search
+            from kb.core.search import hybrid_search
             provider = create_embedding_provider(embedding_config)
             store = VectorStore(vault_path / ".kb" / "vectors.lance")
             try:

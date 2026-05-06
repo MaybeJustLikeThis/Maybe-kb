@@ -1,8 +1,8 @@
 """Tests for SQLite indexer."""
 import pytest
 from pathlib import Path
-from kb.indexer import Database
-from kb.models import Note
+from kb.data.database import Database
+from kb.core.models import Note
 
 
 @pytest.fixture

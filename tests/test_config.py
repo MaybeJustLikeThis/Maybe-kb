@@ -1,7 +1,7 @@
 """Tests for config module."""
 import pytest
 from pathlib import Path
-from kb.config import load_config, KBConfig
+from kb.core.config import load_config, KBConfig
 
 
 def test_load_config_defaults(tmp_path: Path):
