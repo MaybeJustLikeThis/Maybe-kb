@@ -1,7 +1,7 @@
 """Tests for Markdown storage layer."""
 import pytest
 from pathlib import Path
-from kb.storage import parse_markdown_file, write_markdown_file
+from kb.storage import parse_markdown_file, write_markdown_file, chunk_text
 
 
 SAMPLE_MARKDOWN = """\
@@ -121,3 +121,39 @@ def test_no_frontmatter(tmp_path: Path):
     assert note.title == "plain"  # fallback to filename
     assert note.tags == []
     assert "# Just a heading" in note.content
+
+
+def test_chunk_short_text_not_split():
+    """Text under max_chars returns single-element list."""
+    assert chunk_text("短文本", max_chars=1000) == ["短文本"]
+
+
+def test_chunk_long_text_splits_at_paragraphs():
+    """Long text with paragraph breaks splits at \\n\\n."""
+    text = "段落一。" + "x" * 800 + "\n\n" + "段落二。" + "y" * 800
+    result = chunk_text(text, max_chars=1000)
+    assert len(result) >= 2
+    assert "段落一" in result[0]
+    assert "段落二" in result[1]
+
+
+def test_chunk_overlap_preserves_context():
+    """Adjacent chunks share overlap region."""
+    text = "篇章内容" * 500
+    overlap = 100
+    result = chunk_text(text, max_chars=500, overlap=overlap)
+    assert len(result) >= 2
+    assert result[0][-overlap:] == result[1][:overlap]
+
+
+def test_chunk_empty_text():
+    """Empty string returns empty list."""
+    assert chunk_text("") == []
+
+
+def test_chunk_splits_at_sentence_boundary():
+    """When no paragraph break, splits at Chinese period."""
+    sentences = ["句子" + str(i) + "。" + "x" * 400 for i in range(5)]
+    text = "".join(sentences)
+    result = chunk_text(text, max_chars=1000)
+    assert len(result) >= 2

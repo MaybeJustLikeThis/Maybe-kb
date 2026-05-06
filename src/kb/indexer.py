@@ -8,6 +8,8 @@ from typing import Any
 import jieba
 
 from kb.models import Note
+from kb.storage import chunk_text
+from kb.vector import VectorStore, VectorRecord
 
 # Suppress jieba startup logs
 jieba.setLogLevel(20)
@@ -18,6 +20,11 @@ def _tokenize(text: str) -> str:
     if not text:
         return ""
     return " ".join(jieba.cut(text))
+
+
+def _sanitize_fts5_query(query: str) -> str:
+    """Remove FTS5 special characters to prevent query injection."""
+    return query.replace('*', '').replace('"', '').replace('(', '').replace(')', '')
 
 
 class Database:
@@ -199,7 +206,7 @@ class Database:
     def search_fulltext(self, query: str, limit: int = 20) -> list[sqlite3.Row]:
         """Full-text search using FTS5."""
         conn = self._connect()
-        tokenized = _tokenize(query)
+        tokenized = _tokenize(_sanitize_fts5_query(query))
         return conn.execute(
             """
             SELECT n.* FROM notes_fts fts
@@ -228,3 +235,66 @@ class Database:
         conn = self._connect()
         rows = conn.execute("SELECT id, file_hash FROM notes").fetchall()
         return {r["id"]: r["file_hash"] for r in rows if r["file_hash"]}
+
+    def list_all_tags(self) -> list[str]:
+        """Return all unique tags sorted alphabetically."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT DISTINCT tag FROM note_tags ORDER BY tag"
+        ).fetchall()
+        return [r["tag"] for r in rows]
+
+    def list_all_categories(self) -> list[str]:
+        """Return all unique non-empty categories sorted alphabetically."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT DISTINCT category FROM notes "
+            "WHERE category IS NOT NULL AND category != '' ORDER BY category"
+        ).fetchall()
+        return [r["category"] for r in rows]
+
+
+def _index_vectors(
+    vault: Path,
+    db: Database,
+    provider: "EmbeddingProvider",
+    changed_ids: set[str],
+) -> int:
+    """Generate embeddings for changed notes and update LanceDB.
+
+    Only processes notes whose file_hash changed.
+    Deletes vectors for notes that no longer exist in changed_ids
+    but had vectors in the store.
+    Returns number of vector records indexed.
+    """
+    from kb.embedding import EmbeddingProvider as _EP
+
+    store = VectorStore(vault / ".kb" / "vectors.lance")
+    indexed = 0
+
+    try:
+        for file_id in changed_ids:
+            row = db.get_note(file_id)
+            if row is None:
+                store.delete_note(file_id)
+                continue
+            content = row["content"]
+            if not content:
+                continue
+            chunks = chunk_text(content)
+            embed_results = provider.embed_batch(chunks)
+            records = [
+                VectorRecord(
+                    id=file_id,
+                    chunk_id=i,
+                    vector=r.vector,
+                    text=chunks[i],
+                )
+                for i, r in enumerate(embed_results)
+            ]
+            store.upsert_chunks(file_id, records)
+            indexed += len(records)
+    finally:
+        store.close()
+
+    return indexed

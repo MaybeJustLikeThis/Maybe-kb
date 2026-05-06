@@ -4,10 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
+import tomllib
 
 
 @dataclass(frozen=True)
@@ -18,7 +15,7 @@ class SearchConfig:
 @dataclass(frozen=True)
 class EmbeddingConfig:
     provider: str = "local"
-    model: str = "BGE-small-zh"
+    model: str = "BAAI/bge-small-zh-v1.5"
     api_key_env: str | None = None
 
 
@@ -68,7 +65,7 @@ def load_config(base_path: Path) -> KBConfig:
         search=SearchConfig(max_results=search_data.get("max_results", 20)),
         embedding=EmbeddingConfig(
             provider=embedding_data.get("provider", "local"),
-            model=embedding_data.get("model", "BGE-small-zh"),
+            model=embedding_data.get("model", "BAAI/bge-small-zh-v1.5"),
             api_key_env=embedding_data.get("api_key_env"),
         ),
         llm=LLMConfig(

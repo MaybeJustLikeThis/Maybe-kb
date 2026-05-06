@@ -1,22 +1,24 @@
 """CLI entry point for kb."""
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from kb.indexer import Database
-from kb.models import Note
+from kb.indexer import Database, _index_vectors
 from kb.config import load_config
-from kb.storage import discover_notes, parse_markdown_file, write_markdown_file
+from kb.embedding import create_embedding_provider
+from kb.storage import discover_notes, parse_markdown_file, validate_vault_path
+from kb import services
 
 app = typer.Typer(help="Local knowledge base CLI")
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def _get_db() -> Database:
@@ -28,31 +30,46 @@ def _get_db() -> Database:
     return db
 
 
-def _index_files(vault: Path, db: Database, full: bool = False) -> int:
-    """Index notes into database. Returns number of files indexed."""
-    existing = {} if full else db.get_all_hashes()
+def _index_files(
+    vault: Path,
+    db: Database,
+    full: bool = False,
+    embedding_provider: "EmbeddingProvider | None" = None,
+) -> tuple[int, int]:
+    """Index notes into database. Returns (fts5_count, vector_count)."""
+    all_hashes = db.get_all_hashes()
+    existing = {} if full else all_hashes
     files = discover_notes(vault)
+    changed_ids: set[str] = set()
     indexed = 0
 
     for f in files:
         try:
             note = parse_markdown_file(f, vault)
         except Exception:
+            logger.warning("Failed to parse %s, skipping", f, exc_info=True)
             continue
 
-        if not full and existing.get(note.file_id) == note.file_hash:
+        fid = note.file_id
+        if not full and existing.get(fid) == note.file_hash:
             continue
 
         db.upsert_note(note)
         indexed += 1
+        changed_ids.add(fid)
 
     # Remove deleted files from index
     current_ids = {f.relative_to(vault).as_posix() for f in files}
-    for file_id in list(existing.keys()):
+    for file_id in all_hashes:
         if file_id not in current_ids:
             db.delete_note(file_id)
+            changed_ids.add(file_id)
 
-    return indexed
+    vector_count = 0
+    if embedding_provider is not None:
+        vector_count = _index_vectors(vault, db, embedding_provider, changed_ids)
+
+    return indexed, vector_count
 
 
 @app.command()
@@ -80,7 +97,9 @@ def init(
 
     if import_existing:
         db = _get_db()
-        count = _index_files(path.resolve(), db, full=True)
+        config = load_config(path.resolve())
+        provider = create_embedding_provider(config.embedding)
+        count, _ = _index_files(path.resolve(), db, full=True, embedding_provider=provider)
         db.close()
         console.print(f"[green]Indexed {count} existing notes[/green]")
 
@@ -96,44 +115,20 @@ def add_note(
     vault = Path.cwd()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     cat = category if category else None
-    now = datetime.now().isoformat(timespec="seconds")
 
-    slug = title.lower().replace(" ", "-")[:50]
-    # All notes live under notes/ directory
-    file_path = f"notes/{cat}/{slug}.md" if cat else f"notes/{slug}.md"
-
-    # Avoid slug collisions by appending numeric suffix
-    full_path = vault / file_path
-    counter = 2
-    while full_path.exists():
-        suffix = f"-{counter}"
-        if cat:
-            file_path = f"notes/{cat}/{slug}{suffix}.md"
-        else:
-            file_path = f"notes/{slug}{suffix}.md"
-        full_path = vault / file_path
-        counter += 1
-
-    note = Note(
-        file_id=file_path,
-        title=title,
-        tags=tag_list,
-        category=cat,
-        description=description or None,
-        content=f"# {title}\n\n",
-        created_at=now,
-        updated_at=now,
-    )
-
-    write_markdown_file(full_path, note)
-
-    # Auto-index the new note
     db = _get_db()
-    parsed = parse_markdown_file(full_path, vault)
-    db.upsert_note(parsed)
-    db.close()
+    try:
+        note = services.create_note(
+            vault, db, title, f"# {title}\n\n",
+            cat, tag_list, description or None,
+        )
+    except ValueError:
+        console.print("[red]Path traversal blocked in note path[/red]")
+        raise typer.Exit(1)
+    finally:
+        db.close()
 
-    console.print(f"[green]Created note:[/green] {file_path}")
+    console.print(f"[green]Created note:[/green] {note.file_id}")
 
 
 @app.command("list")
@@ -195,12 +190,14 @@ def index(
 ):
     """Build or update the search index."""
     vault = Path.cwd()
+    config = load_config(vault)
     db = _get_db()
-    count = _index_files(vault, db, full=full)
+    provider = create_embedding_provider(config.embedding)
+    fts5_count, vec_count = _index_files(vault, db, full=full, embedding_provider=provider)
     db.close()
 
     mode = "full rebuild" if full else "incremental update"
-    console.print(f"[green]Index {mode}: {count} files indexed[/green]")
+    console.print(f"[green]Index {mode}: {fts5_count} files indexed, {vec_count} vectors[/green]")
 
 
 @app.command()
@@ -210,23 +207,23 @@ def delete(
 ):
     """Delete a note."""
     vault = Path.cwd()
-    full_path = vault / file_path
-
-    if not full_path.exists():
-        console.print(f"[red]File not found: {file_path}[/red]")
-        raise typer.Exit(1)
 
     if not force:
         confirm = typer.confirm(f"Delete {file_path}?")
         if not confirm:
             raise typer.Abort()
 
-    full_path.unlink()
-
-    # file_id is path relative to vault
     db = _get_db()
-    db.delete_note(file_path)
-    db.close()
+    try:
+        services.delete_note(vault, db, file_path)
+    except ValueError:
+        console.print(f"[red]Path traversal blocked: {file_path}[/red]")
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        console.print(f"[red]File not found: {file_path}[/red]")
+        raise typer.Exit(1)
+    finally:
+        db.close()
 
     console.print(f"[green]Deleted: {file_path}[/green]")
 
@@ -237,14 +234,19 @@ def edit(
 ):
     """Open a note in the system's default editor."""
     vault = Path.cwd()
-    full_path = vault / file_path
+    try:
+        full_path = validate_vault_path(vault, file_path)
+    except ValueError:
+        console.print(f"[red]Path traversal blocked: {file_path}[/red]")
+        raise typer.Exit(1)
 
-    if not full_path.exists():
+    if not full_path.is_file():
         console.print(f"[red]File not found: {file_path}[/red]")
         raise typer.Exit(1)
 
     if sys.platform == "win32":
-        subprocess.run(["start", str(full_path)], shell=True, check=False)
+        import os as _os
+        _os.startfile(str(full_path))
     elif sys.platform == "darwin":
         subprocess.run(["open", str(full_path)], check=False)
     else:
@@ -279,30 +281,40 @@ def tag(
 ):
     """Add or remove tags from a note."""
     vault = Path.cwd()
-    full_path = vault / file_path
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-    if not full_path.exists():
+    try:
+        _, note = services.resolve_note(vault, file_path)
+    except ValueError:
+        console.print(f"[red]Path traversal blocked: {file_path}[/red]")
+        raise typer.Exit(1)
+    except FileNotFoundError:
         console.print(f"[red]File not found: {file_path}[/red]")
         raise typer.Exit(1)
 
-    note = parse_markdown_file(full_path, vault)
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-
     if action == "add":
-        for t in tag_list:
-            if t not in note.tags:
-                note.tags.append(t)
+        existing = set(note.tags)
+        new_tags = [t for t in tag_list if t not in existing]
+        note.tags = [*note.tags, *new_tags]
     elif action == "remove":
         note.tags = [t for t in note.tags if t not in tag_list]
     else:
         console.print(f"[red]Unknown action: {action}. Use 'add' or 'remove'.[/red]")
         raise typer.Exit(1)
 
-    note.updated_at = datetime.now().isoformat(timespec="seconds")
-    write_markdown_file(full_path, note)
-
+    saved = services.save_note_file(vault, note)
     db = _get_db()
-    db.upsert_note(note)
+    db.upsert_note(saved)
     db.close()
 
-    console.print(f"[green]Updated tags: {note.tags}[/green]")
+    console.print(f"[green]Updated tags: {saved.tags}[/green]")
+
+
+@app.command()
+def mcp():
+    """Start MCP server for Claude Code integration."""
+    vault = Path.cwd()
+    config = load_config(vault)
+    from kb.mcp_server import create_mcp_server
+    server = create_mcp_server(config)
+    server.run()

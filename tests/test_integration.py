@@ -98,7 +98,7 @@ def test_incremental_index(project: Path, db: Database):
     vue_file.write_text(content + "\n\n## 新增章节\n\n新增内容。\n", encoding="utf-8")
 
     from kb.cli import _index_files
-    count = _index_files(project, db, full=False)
+    count, _ = _index_files(project, db, full=False)
     assert count == 1
 
 

@@ -83,6 +83,15 @@ def _build_frontmatter_yaml(note: Note) -> str:
     ).strip()
 
 
+def make_slug(title: str, category: str | None = None) -> tuple[str, str | None]:
+    """Sanitize title and category into safe filename components."""
+    slug = title.lower().replace(" ", "-").replace("/", "-").replace("\\", "-")[:50]
+    cat = None
+    if category is not None:
+        cat = category.replace("/", "-").replace("\\", "-")
+    return slug, cat
+
+
 def write_markdown_file(file_path: Path, note: Note) -> None:
     """Write a Note to a Markdown file with frontmatter."""
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,9 +101,102 @@ def write_markdown_file(file_path: Path, note: Note) -> None:
     file_path.write_text(f"---\n{fm}\n---\n\n{body}", encoding="utf-8")
 
 
+def validate_vault_path(vault_path: Path, file_id: str) -> Path:
+    """Resolve a file_id against vault_path, blocking path traversal.
+
+    Returns the resolved absolute Path, or raises ValueError if the path
+    escapes the vault.
+    """
+    resolved = (vault_path / file_id).resolve()
+    vault_resolved = vault_path.resolve()
+    if not resolved.is_relative_to(vault_resolved):
+        raise ValueError(f"Path traversal blocked: {file_id}")
+    return resolved
+
+
 def discover_notes(vault_path: Path) -> list[Path]:
     """Find all .md files under notes/ directory."""
     notes_dir = vault_path / "notes"
     if not notes_dir.exists():
         return []
     return sorted(notes_dir.rglob("*.md"))
+
+
+def chunk_text(text: str, max_chars: int = 1000, overlap: int = 100) -> list[str]:
+    """Split text into overlapping chunks at paragraph or sentence boundaries."""
+    if not text:
+        return []
+
+    if len(text) <= max_chars:
+        return [text]
+
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for para in paragraphs:
+        para_len = len(para)
+        if current_len + para_len <= max_chars:
+            current.append(para)
+            current_len += para_len
+        else:
+            if current:
+                chunks.append("\n\n".join(current))
+            if para_len > max_chars:
+                sub_chunks = _split_long_paragraph(para, max_chars, overlap)
+                chunks.extend(sub_chunks)
+                current = []
+                current_len = 0
+            else:
+                current = [para]
+                current_len = para_len
+
+    if current:
+        chunks.append("\n\n".join(current))
+
+    if overlap and len(chunks) > 1:
+        chunks = _apply_overlap(chunks, overlap)
+
+    return chunks
+
+
+def _split_long_paragraph(text: str, max_chars: int, overlap: int) -> list[str]:
+    """Split a single paragraph at sentence boundaries."""
+    sentences = re.split(r"(?<=[.。！？!?])\s*", text)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for sentence in sentences:
+        s_len = len(sentence)
+        if current_len + s_len <= max_chars:
+            current.append(sentence)
+            current_len += s_len
+        else:
+            if current:
+                chunks.append("".join(current))
+            if s_len > max_chars:
+                for i in range(0, s_len, max_chars - overlap):
+                    chunks.append(sentence[i:i + max_chars])
+                current = []
+                current_len = 0
+            else:
+                current = [sentence]
+                current_len = s_len
+
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
+def _apply_overlap(chunks: list[str], overlap: int) -> list[str]:
+    """Add overlap text from previous chunk to next chunk."""
+    result = [chunks[0]]
+    for i in range(1, len(chunks)):
+        prev = chunks[i - 1]
+        if len(prev) > overlap:
+            result.append(prev[-overlap:] + chunks[i])
+        else:
+            result.append(chunks[i])
+    return result
