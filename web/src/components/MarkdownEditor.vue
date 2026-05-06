@@ -24,6 +24,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const props = defineProps<{
   modelValue: string
@@ -36,6 +37,7 @@ defineEmits<{
 const preview = ref(true)
 
 const renderedHtml = computed(() => {
-  return marked(props.modelValue || '', { breaks: true }) as string
+  const raw = marked(props.modelValue || '', { breaks: true }) as string
+  return DOMPurify.sanitize(raw)
 })
 </script>
