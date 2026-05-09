@@ -49,7 +49,15 @@ def _index_files(
             if not src_dir.is_dir():
                 continue
             for f in sorted(src_dir.rglob("*.md")):
-                dest = notes_dir / f.name
+                try:
+                    note = parse_markdown_file(f, src_dir)
+                    cat = note.category if note.category else "未分类"
+                except Exception:
+                    cat = "未分类"
+                cat = cat.replace("/", "-").replace("\\", "-")
+                category_dir = notes_dir / cat
+                category_dir.mkdir(exist_ok=True)
+                dest = category_dir / f.name
                 if not dest.exists():
                     dest.write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
 
