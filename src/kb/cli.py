@@ -365,49 +365,50 @@ def migrate(
         return
 
     db = _get_db()
-    moved = 0
+    try:
+        moved = 0
 
-    for src in root_files:
-        try:
-            note = parse_markdown_file(src, vault)
-        except Exception:
-            logger.warning("Failed to parse %s, skipping", src, exc_info=True)
-            continue
+        for src in root_files:
+            try:
+                note = parse_markdown_file(src, vault)
+            except Exception:
+                logger.warning("Failed to parse %s, skipping", src, exc_info=True)
+                continue
 
-        cat_raw = note.category or "未分类"
-        cat = cat_raw.replace("/", "-").replace("\\", "-")
-        slug = src.stem
+            cat_raw = note.category or "未分类"
+            cat = cat_raw.replace("/", "-").replace("\\", "-")
+            slug = src.stem
 
-        target = notes_dir / cat / src.name
-        counter = 2
-        while target.exists():
-            target = notes_dir / cat / f"{slug}-{counter}{src.suffix}"
-            counter += 1
+            target = notes_dir / cat / src.name
+            counter = 2
+            while target.exists():
+                target = notes_dir / cat / f"{slug}-{counter}{src.suffix}"
+                counter += 1
+
+            if dry_run:
+                console.print(
+                    f"[dim]Would move: {src.name} → {target.relative_to(vault).as_posix()}[/dim]"
+                )
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                src.rename(target)
+                console.print(
+                    f"[green]Moved: {src.name} → {target.relative_to(vault).as_posix()}[/green]"
+                )
+            moved += 1
 
         if dry_run:
-            console.print(
-                f"[dim]Would move: {src.name} → {target.relative_to(vault).as_posix()}[/dim]"
-            )
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            src.rename(target)
-            console.print(
-                f"[green]Moved: {src.name} → {target.relative_to(vault).as_posix()}[/green]"
-            )
-        moved += 1
+            console.print(f"\n[bold]Would migrate {moved} note(s).[/bold]")
+            return
 
-    if dry_run:
-        console.print(f"\n[bold]Would migrate {moved} note(s).[/bold]")
+        console.print(f"\n[bold]Migrated {moved} note(s).[/bold]")
+
+        config = load_config(vault)
+        provider = create_embedding_provider(config.embedding) if config.embedding else None
+        count, vec_count = _index_files(vault, db, full=True, embedding_provider=provider)
+        console.print(f"[green]Reindexed {count} notes, {vec_count} vectors.[/green]")
+    finally:
         db.close()
-        return
-
-    console.print(f"\n[bold]Migrated {moved} note(s).[/bold]")
-
-    config = load_config(vault)
-    provider = create_embedding_provider(config.embedding) if config.embedding else None
-    count, vec_count = _index_files(vault, db, full=True, embedding_provider=provider)
-    console.print(f"[green]Reindexed {count} notes, {vec_count} vectors.[/green]")
-    db.close()
 
 
 @app.command()
