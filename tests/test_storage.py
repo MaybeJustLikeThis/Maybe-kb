@@ -1,7 +1,7 @@
 """Tests for Markdown storage layer."""
 import pytest
 from pathlib import Path
-from kb.data.storage import parse_markdown_file, write_markdown_file, chunk_text
+from kb.data.storage import parse_markdown_file, write_markdown_file, chunk_text, make_slug
 
 
 SAMPLE_MARKDOWN = """\
@@ -157,3 +157,22 @@ def test_chunk_splits_at_sentence_boundary():
     text = "".join(sentences)
     result = chunk_text(text, max_chars=1000)
     assert len(result) >= 2
+
+
+def test_make_slug_with_category():
+    slug, cat = make_slug("Hello World", "tech")
+    assert slug == "hello-world"
+    assert cat == "tech"
+
+
+def test_make_slug_without_category_defaults_to_weifenlei():
+    slug, cat = make_slug("Hello World")
+    assert slug == "hello-world"
+    assert cat == "未分类"
+
+
+def test_make_slug_sanitizes_category():
+    slug, cat = make_slug("Title", "a/b\\c")
+    assert cat == "a-b-c"
+    assert "/" not in cat
+    assert "\\" not in cat

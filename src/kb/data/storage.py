@@ -83,12 +83,10 @@ def _build_frontmatter_yaml(note: Note) -> str:
     ).strip()
 
 
-def make_slug(title: str, category: str | None = None) -> tuple[str, str | None]:
+def make_slug(title: str, category: str | None = None) -> tuple[str, str]:
     """Sanitize title and category into safe filename components."""
     slug = title.lower().replace(" ", "-").replace("/", "-").replace("\\", "-")[:50]
-    cat = None
-    if category is not None:
-        cat = category.replace("/", "-").replace("\\", "-")
+    cat = category.replace("/", "-").replace("\\", "-") if category else "未分类"
     return slug, cat
 
 
