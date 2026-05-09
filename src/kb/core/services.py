@@ -69,13 +69,13 @@ def create_note(
     cat = category if category else None
 
     slug, cat = make_slug(title, cat)
-    file_path = f"notes/{cat}/{slug}.md" if cat else f"notes/{slug}.md"
+    file_path = f"notes/{cat}/{slug}.md"
     full_path = validate_vault_path(vault_path, file_path)
 
     counter = 2
     while full_path.exists():
         suffix = f"-{counter}"
-        file_path = f"notes/{cat}/{slug}{suffix}.md" if cat else f"notes/{slug}{suffix}.md"
+        file_path = f"notes/{cat}/{slug}{suffix}.md"
         full_path = validate_vault_path(vault_path, file_path)
         counter += 1
 

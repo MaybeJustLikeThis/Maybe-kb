@@ -44,7 +44,24 @@ def test_create_note_slug_collision(tmp_path: Path):
     n2 = create_note(vault, db, "Same Title", "content 2")
 
     assert n1.file_id != n2.file_id
+    assert n1.file_id.startswith("notes/未分类/")
+    assert n2.file_id.startswith("notes/未分类/")
     assert "-2" in n2.file_id
+    db.close()
+
+
+def test_create_note_no_category_goes_to_weifenlei(tmp_path: Path):
+    """Notes without category are stored under 未分类/."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(vault, db, "Random Thought", "content")
+
+    assert note.file_id.startswith("notes/未分类/")
+    assert (vault / note.file_id).is_file()
     db.close()
 
 
