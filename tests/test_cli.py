@@ -129,3 +129,76 @@ def test_kb_serve_help(kb_dir: Path):
     assert result.exit_code == 0
     assert "--host" in result.output
     assert "--port" in result.output
+
+
+def test_kb_migrate_dry_run(kb_dir: Path):
+    """kb migrate --dry-run shows preview without moving files."""
+    import os
+
+    note = kb_dir / "notes" / "test-note.md"
+    note.parent.mkdir(exist_ok=True)
+    note.write_text(
+        "---\ntitle: Test Note\ncategories: tech\n---\n\n# Test\nContent.\n",
+        encoding="utf-8",
+    )
+
+    os.chdir(kb_dir)
+    result = runner.invoke(app, ["migrate", "--dry-run"])
+
+    assert "Would move" in result.stdout
+    assert note.exists()
+
+
+def test_kb_migrate_moves_files(kb_dir: Path):
+    """kb migrate moves root-level .md files into category dirs."""
+    import os
+
+    note = kb_dir / "notes" / "tech-note.md"
+    note.parent.mkdir(exist_ok=True)
+    note.write_text(
+        "---\ntitle: Tech Note\ncategories: tech\n---\n\n# Tech\nContent.\n",
+        encoding="utf-8",
+    )
+
+    os.chdir(kb_dir)
+    result = runner.invoke(app, ["migrate"])
+
+    assert "Migrated" in result.stdout
+    assert not note.exists()
+    assert (kb_dir / "notes" / "tech" / "tech-note.md").exists()
+
+
+def test_kb_migrate_no_category_goes_to_weifenlei(kb_dir: Path):
+    """kb migrate puts uncategorized notes under 未分类/."""
+    import os
+
+    note = kb_dir / "notes" / "random.md"
+    note.parent.mkdir(exist_ok=True)
+    note.write_text(
+        "---\ntitle: Random\n---\n\n# Random\nContent.\n",
+        encoding="utf-8",
+    )
+
+    os.chdir(kb_dir)
+    result = runner.invoke(app, ["migrate"])
+
+    assert not note.exists()
+    assert (kb_dir / "notes" / "未分类" / "random.md").exists()
+
+
+def test_kb_migrate_idempotent(kb_dir: Path):
+    """kb migrate is idempotent."""
+    import os
+
+    note = kb_dir / "notes" / "tech" / "existing.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text(
+        "---\ntitle: Existing\ncategories: tech\n---\n\n# Existing\nContent.\n",
+        encoding="utf-8",
+    )
+
+    os.chdir(kb_dir)
+    result = runner.invoke(app, ["migrate"])
+
+    assert note.exists()
+    assert "No root-level notes to migrate" in result.stdout or "Migrated 0" in result.stdout

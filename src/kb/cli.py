@@ -35,8 +35,24 @@ def _index_files(
     db: Database,
     full: bool = False,
     embedding_provider: "EmbeddingProvider | None" = None,
+    external_sources: list[Path] | None = None,
 ) -> tuple[int, int]:
-    """Index notes into database. Returns (fts5_count, vector_count)."""
+    """Index notes into database. Returns (fts5_count, vector_count).
+
+    If external_sources is provided, .md files from those directories are
+    synced into vault/notes/ before indexing (new files only, no overwrite).
+    """
+    if external_sources:
+        notes_dir = vault / "notes"
+        notes_dir.mkdir(exist_ok=True)
+        for src_dir in external_sources:
+            if not src_dir.is_dir():
+                continue
+            for f in sorted(src_dir.rglob("*.md")):
+                dest = notes_dir / f.name
+                if not dest.exists():
+                    dest.write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+
     all_hashes = db.get_all_hashes()
     existing = {} if full else all_hashes
     files = discover_notes(vault)
@@ -103,7 +119,8 @@ def init(
             'top_k = 5\n\n'
             '[server]\n'
             'host = "127.0.0.1"\n'
-            'port = 8420\n',
+            'port = 8420\n'
+            '# watch_dir = "~/blog/source/_posts"\n',
             encoding="utf-8",
         )
 
@@ -271,6 +288,10 @@ def edit(
 def serve(
     host: str = typer.Option("127.0.0.1", help="Server host"),
     port: int = typer.Option(8420, help="Server port"),
+    watch: Path | None = typer.Option(
+        None, "--watch",
+        help="Watch a directory for .md changes and auto-reindex",
+    ),
 ):
     """Start the web UI server."""
     import uvicorn
@@ -283,8 +304,110 @@ def serve(
     from kb.server import create_app
     web_app = create_app(config)
 
+    observer = None
+    watch_dir_path = watch.resolve() if watch else None
+    if watch_dir_path is None and config.server.watch_dir:
+        watch_dir_path = Path(config.server.watch_dir).expanduser().resolve()
+    if watch_dir_path is not None:
+        if not watch_dir_path.is_dir():
+            console.print(f"[red]Watch directory not found: {watch_dir_path}[/red]")
+            raise typer.Exit(1)
+
+        from kb.core.watcher import start_watcher
+        from kb.data.embedding import create_embedding_provider
+
+        db = _get_db()
+        provider = create_embedding_provider(config.embedding)
+        sources = [watch_dir_path]
+
+        # Run initial index on startup (sync Hexo → notes → index)
+        count, vec_count = _index_files(
+            vault, db, full=False, embedding_provider=provider,
+            external_sources=sources,
+        )
+        console.print(f"[green]Initial index: {count} files, {vec_count} vectors[/green]")
+
+        def on_change():
+            _index_files(
+                vault, db, full=False, embedding_provider=provider,
+                external_sources=sources,
+            )
+
+        observer = start_watcher(watch_dir_path, on_change, debounce_ms=200)
+        console.print(f"[green]Watching {watch_dir_path} for .md changes[/green]")
+
     console.print(f"[green]Starting kb server at http://{host}:{port}[/green]")
-    uvicorn.run(web_app, host=host, port=port, log_level="info")
+
+    try:
+        uvicorn.run(web_app, host=host, port=port, log_level="info")
+    finally:
+        if observer is not None:
+            observer.stop()
+            observer.join()
+
+
+@app.command()
+def migrate(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview changes without moving files"
+    ),
+):
+    """Migrate root-level notes into category subdirectories."""
+    vault = Path.cwd()
+    notes_dir = vault / "notes"
+    if not notes_dir.is_dir():
+        console.print("[red]notes/ directory not found[/red]")
+        raise typer.Exit(1)
+
+    root_files = sorted(notes_dir.glob("*.md"))
+    if not root_files:
+        console.print("[dim]No root-level notes to migrate.[/dim]")
+        return
+
+    db = _get_db()
+    moved = 0
+
+    for src in root_files:
+        try:
+            note = parse_markdown_file(src, vault)
+        except Exception:
+            logger.warning("Failed to parse %s, skipping", src, exc_info=True)
+            continue
+
+        cat_raw = note.category or "未分类"
+        cat = cat_raw.replace("/", "-").replace("\\", "-")
+        slug = src.stem
+
+        target = notes_dir / cat / src.name
+        counter = 2
+        while target.exists():
+            target = notes_dir / cat / f"{slug}-{counter}{src.suffix}"
+            counter += 1
+
+        if dry_run:
+            console.print(
+                f"[dim]Would move: {src.name} → {target.relative_to(vault).as_posix()}[/dim]"
+            )
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            src.rename(target)
+            console.print(
+                f"[green]Moved: {src.name} → {target.relative_to(vault).as_posix()}[/green]"
+            )
+        moved += 1
+
+    if dry_run:
+        console.print(f"\n[bold]Would migrate {moved} note(s).[/bold]")
+        db.close()
+        return
+
+    console.print(f"\n[bold]Migrated {moved} note(s).[/bold]")
+
+    config = load_config(vault)
+    provider = create_embedding_provider(config.embedding) if config.embedding else None
+    count, vec_count = _index_files(vault, db, full=True, embedding_provider=provider)
+    console.print(f"[green]Reindexed {count} notes, {vec_count} vectors.[/green]")
+    db.close()
 
 
 @app.command()
@@ -358,9 +481,14 @@ def ask(
 
 
 @app.command()
-def mcp():
+def mcp(
+    path: Path = typer.Option(
+        Path.cwd(),
+        help="Knowledge base project directory",
+    ),
+):
     """Start MCP server for Claude Code integration."""
-    vault = Path.cwd()
+    vault = path.resolve()
     config = load_config(vault)
     from kb.mcp_server import create_mcp_server
     server = create_mcp_server(config)
