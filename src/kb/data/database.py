@@ -197,10 +197,7 @@ class Database:
             params.append(category)
 
         query += " WHERE " + " AND ".join(conditions)
-        if sort == "updated_at_desc":
-            query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
-        else:
-            query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
+        query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
         params.append(limit)
 
         return conn.execute(query, params).fetchall()

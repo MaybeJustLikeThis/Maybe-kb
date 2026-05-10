@@ -67,7 +67,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
     def list_notes(
         category: str | None = Query(None),
         tag: str | None = Query(None),
-        limit: int = Query(50),
+        limit: int = Query(50, ge=1, le=200),
         sort: str | None = Query(None),
     ):
         rows = ctx.db.list_notes(

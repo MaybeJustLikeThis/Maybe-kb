@@ -93,7 +93,36 @@ def test_get_categories_without_count(tmp_vault):
 
 def test_list_notes_sort(tmp_vault):
     tmp_path, client = tmp_vault
-    resp = client.get("/api/notes?limit=5")
+    from kb.core.models import Note
+
+    note_a = Note(
+        file_id="notes/sort_a.md", title="Sort Note A",
+        content="Content A", category="test",
+        tags=[], status="published", file_hash="aaa",
+    )
+    note_a.updated_at = "2026-01-01"
+    note_b = Note(
+        file_id="notes/sort_b.md", title="Sort Note B",
+        content="Content B", category="test",
+        tags=[], status="published", file_hash="bbb",
+    )
+    note_b.updated_at = "2026-06-01"
+
+    # Create a fresh context pointing at the same vault so we control timestamps.
+    ctx2 = AppContext.from_config(_fake_config(), vault=tmp_path,
+                                  with_embedding=False, with_llm=False)
+    ctx2.db.upsert_note(note_a)
+    ctx2.db.upsert_note(note_b)
+
+    from kb.routes import create_api_router
+    router2 = create_api_router(ctx2)
+    app2 = FastAPI()
+    app2.include_router(router2, prefix="/api")
+    client2 = TestClient(app2)
+
+    resp = client2.get("/api/notes?limit=5")
     assert resp.status_code == 200
     notes = resp.json()
-    assert len(notes) >= 1
+    assert len(notes) >= 2
+    # note_b has later updated_at, should appear first
+    assert notes[0]["file_id"] == "notes/sort_b.md"
