@@ -1,99 +1,37 @@
 """CLI entry point for kb."""
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from kb.data.database import Database, _index_vectors
 from kb.core.config import load_config
-from kb.data.embedding import create_embedding_provider
-from kb.data.storage import discover_notes, parse_markdown_file, validate_vault_path
+from kb.core.context import AppContext
+from kb.core.indexer import index_files
+from kb.data.storage import parse_markdown_file, validate_vault_path
 from kb.core import services
+from kb.core.eval import EvalEngine, load_dataset, filter_queries, compare_results
 
 app = typer.Typer(help="Local knowledge base CLI")
 console = Console()
 logger = logging.getLogger(__name__)
 
 
-def _get_db() -> Database:
-    """Get database instance for current project."""
+def _get_context(*, with_embedding: bool = False, with_llm: bool = False) -> AppContext:
+    """Get AppContext for current working directory."""
     vault = Path.cwd()
-    db_path = vault / ".kb" / "kb.db"
-    db = Database(db_path)
-    db.initialize()
-    return db
-
-
-def _index_files(
-    vault: Path,
-    db: Database,
-    full: bool = False,
-    embedding_provider: "EmbeddingProvider | None" = None,
-    external_sources: list[Path] | None = None,
-) -> tuple[int, int]:
-    """Index notes into database. Returns (fts5_count, vector_count).
-
-    If external_sources is provided, .md files from those directories are
-    synced into vault/notes/ before indexing (new files only, no overwrite).
-    """
-    if external_sources:
-        notes_dir = vault / "notes"
-        notes_dir.mkdir(exist_ok=True)
-        for src_dir in external_sources:
-            if not src_dir.is_dir():
-                continue
-            for f in sorted(src_dir.rglob("*.md")):
-                try:
-                    note = parse_markdown_file(f, src_dir)
-                    cat = note.category if note.category else "未分类"
-                except Exception:
-                    cat = "未分类"
-                cat = cat.replace("/", "-").replace("\\", "-")
-                category_dir = notes_dir / cat
-                category_dir.mkdir(exist_ok=True)
-                dest = category_dir / f.name
-                if not dest.exists():
-                    dest.write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
-
-    all_hashes = db.get_all_hashes()
-    existing = {} if full else all_hashes
-    files = discover_notes(vault)
-    changed_ids: set[str] = set()
-    indexed = 0
-
-    for f in files:
-        try:
-            note = parse_markdown_file(f, vault)
-        except Exception:
-            logger.warning("Failed to parse %s, skipping", f, exc_info=True)
-            continue
-
-        fid = note.file_id
-        if not full and existing.get(fid) == note.file_hash:
-            continue
-
-        db.upsert_note(note)
-        indexed += 1
-        changed_ids.add(fid)
-
-    # Remove deleted files from index
-    current_ids = {f.relative_to(vault).as_posix() for f in files}
-    for file_id in all_hashes:
-        if file_id not in current_ids:
-            db.delete_note(file_id)
-            changed_ids.add(file_id)
-
-    vector_count = 0
-    if embedding_provider is not None:
-        vector_count = _index_vectors(vault, db, embedding_provider, changed_ids)
-
-    return indexed, vector_count
+    config = load_config(vault)
+    return AppContext.from_config(
+        config, vault=vault,
+        with_embedding=with_embedding, with_llm=with_llm,
+    )
 
 
 @app.command()
@@ -135,11 +73,9 @@ def init(
     console.print(f"[green]Initialized knowledge base at {path.resolve()}[/green]")
 
     if import_existing:
-        db = _get_db()
-        config = load_config(path.resolve())
-        provider = create_embedding_provider(config.embedding)
-        count, _ = _index_files(path.resolve(), db, full=True, embedding_provider=provider)
-        db.close()
+        ctx = _get_context(with_embedding=True)
+        count, _ = index_files(path.resolve(), ctx.db, full=True, embedding_provider=ctx.embedding)
+        ctx.close()
         console.print(f"[green]Indexed {count} existing notes[/green]")
 
 
@@ -155,17 +91,17 @@ def add_note(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     cat = category if category else None
 
-    db = _get_db()
+    ctx = _get_context()
     try:
         note = services.create_note(
-            vault, db, title, f"# {title}\n\n",
+            vault, ctx.db, title, f"# {title}\n\n",
             cat, tag_list, description or None,
         )
     except ValueError:
         console.print("[red]Path traversal blocked in note path[/red]")
         raise typer.Exit(1)
     finally:
-        db.close()
+        ctx.close()
 
     console.print(f"[green]Created note:[/green] {note.file_id}")
 
@@ -177,9 +113,9 @@ def list_notes(
     limit: int = typer.Option(20, help="Max results"),
 ):
     """List notes in the knowledge base."""
-    db = _get_db()
-    rows = db.list_notes(category=category, tag=tag, limit=limit)
-    db.close()
+    ctx = _get_context()
+    rows = ctx.db.list_notes(category=category, tag=tag, limit=limit)
+    ctx.close()
 
     if not rows:
         console.print("[dim]No notes found.[/dim]")
@@ -208,9 +144,9 @@ def search(
     limit: int = typer.Option(10, help="Max results"),
 ):
     """Full-text search across notes."""
-    db = _get_db()
-    results = db.search_fulltext(query, limit=limit)
-    db.close()
+    ctx = _get_context()
+    results = ctx.db.search_fulltext(query, limit=limit)
+    ctx.close()
 
     if not results:
         console.print("[dim]No results found.[/dim]")
@@ -229,11 +165,9 @@ def index(
 ):
     """Build or update the search index."""
     vault = Path.cwd()
-    config = load_config(vault)
-    db = _get_db()
-    provider = create_embedding_provider(config.embedding)
-    fts5_count, vec_count = _index_files(vault, db, full=full, embedding_provider=provider)
-    db.close()
+    ctx = _get_context(with_embedding=True)
+    fts5_count, vec_count = index_files(vault, ctx.db, full=full, embedding_provider=ctx.embedding)
+    ctx.close()
 
     mode = "full rebuild" if full else "incremental update"
     console.print(f"[green]Index {mode}: {fts5_count} files indexed, {vec_count} vectors[/green]")
@@ -252,9 +186,9 @@ def delete(
         if not confirm:
             raise typer.Abort()
 
-    db = _get_db()
+    ctx = _get_context()
     try:
-        services.delete_note(vault, db, file_path)
+        services.delete_note(vault, ctx.db, file_path)
     except ValueError:
         console.print(f"[red]Path traversal blocked: {file_path}[/red]")
         raise typer.Exit(1)
@@ -262,7 +196,7 @@ def delete(
         console.print(f"[red]File not found: {file_path}[/red]")
         raise typer.Exit(1)
     finally:
-        db.close()
+        ctx.close()
 
     console.print(f"[green]Deleted: {file_path}[/green]")
 
@@ -322,22 +256,19 @@ def serve(
             raise typer.Exit(1)
 
         from kb.core.watcher import start_watcher
-        from kb.data.embedding import create_embedding_provider
 
-        db = _get_db()
-        provider = create_embedding_provider(config.embedding)
+        ctx = _get_context(with_embedding=True)
         sources = [watch_dir_path]
 
-        # Run initial index on startup (sync Hexo → notes → index)
-        count, vec_count = _index_files(
-            vault, db, full=False, embedding_provider=provider,
+        count, vec_count = index_files(
+            vault, ctx.db, full=False, embedding_provider=ctx.embedding,
             external_sources=sources,
         )
         console.print(f"[green]Initial index: {count} files, {vec_count} vectors[/green]")
 
         def on_change():
-            _index_files(
-                vault, db, full=False, embedding_provider=provider,
+            index_files(
+                vault, ctx.db, full=False, embedding_provider=ctx.embedding,
                 external_sources=sources,
             )
 
@@ -372,7 +303,7 @@ def migrate(
         console.print("[dim]No root-level notes to migrate.[/dim]")
         return
 
-    db = _get_db()
+    ctx = _get_context(with_embedding=True)
     try:
         moved = 0
 
@@ -411,12 +342,10 @@ def migrate(
 
         console.print(f"\n[bold]Migrated {moved} note(s).[/bold]")
 
-        config = load_config(vault)
-        provider = create_embedding_provider(config.embedding) if config.embedding else None
-        count, vec_count = _index_files(vault, db, full=True, embedding_provider=provider)
+        count, vec_count = index_files(vault, ctx.db, full=True, embedding_provider=ctx.embedding)
         console.print(f"[green]Reindexed {count} notes, {vec_count} vectors.[/green]")
     finally:
-        db.close()
+        ctx.close()
 
 
 @app.command()
@@ -449,9 +378,9 @@ def tag(
         raise typer.Exit(1)
 
     saved = services.save_note_file(vault, note)
-    db = _get_db()
-    db.upsert_note(saved)
-    db.close()
+    ctx = _get_context()
+    ctx.db.upsert_note(saved)
+    ctx.close()
 
     console.print(f"[green]Updated tags: {saved.tags}[/green]")
 
@@ -463,30 +392,191 @@ def ask(
     stream: bool = typer.Option(False, "--stream", "-s", help="Stream the response"),
 ):
     """Ask a question using RAG over your knowledge base."""
-    vault = Path.cwd()
-    config = load_config(vault)
-
     from kb.core.rag import rag_query, rag_query_stream
-    from kb.data.llm import create_llm_provider
-    from kb.data.vector import VectorStore
 
-    db = _get_db()
-    provider = create_embedding_provider(config.embedding)
-    llm = create_llm_provider(config.llm)
-    store = VectorStore(vault / ".kb" / "vectors.lance")
+    ctx = _get_context(with_embedding=True, with_llm=True)
 
     try:
         if stream:
-            for chunk in rag_query_stream(query, db, provider, store, llm, top_k=top_k):
+            for chunk in rag_query_stream(query, ctx.db, ctx.embedding, ctx.vector_store, ctx.llm, top_k=top_k):
                 console.print(chunk.text, end="")
             console.print()
         else:
             with console.status("[bold green]Thinking..."):
-                response = rag_query(query, db, provider, store, llm, top_k=top_k)
+                response = rag_query(query, ctx.db, ctx.embedding, ctx.vector_store, ctx.llm, top_k=top_k)
             console.print(response.text)
     finally:
-        store.close()
-        db.close()
+        ctx.close()
+
+
+def _reconstruct_result(data: dict) -> EvalResult:
+    """Reconstruct EvalResult from JSON dict for comparison."""
+    from kb.core.eval import EvalResult, EvalSummary, EvalDetail
+
+    summary_data = data["summary"]
+    summary = EvalSummary(
+        total=summary_data["total"],
+        hit_rate=summary_data["hit_rate"],
+        avg_rank=summary_data["avg_rank"],
+        mrr=summary_data["mrr"],
+        keyword_score=summary_data["keyword_score"],
+        llm_judge_avg=summary_data.get("llm_judge_avg"),
+        overall=summary_data["overall"],
+    )
+
+    details = [
+        EvalDetail(
+            id=d["id"],
+            hit=d["hit"],
+            rank=d["rank"],
+            keyword_score=d["keyword_score"],
+            llm_judge=d.get("llm_judge"),
+            llm_judge_reason=d.get("llm_judge_reason"),
+        )
+        for d in data["details"]
+    ]
+
+    return EvalResult(
+        timestamp=data["timestamp"],
+        config=data["config"],
+        summary=summary,
+        details=details,
+    )
+
+
+@app.command("eval")
+def eval_cmd(
+    subset: str = typer.Option(None, "--subset", help="Filter by difficulty (easy/medium/hard)"),
+    category: str = typer.Option(None, "--category", help="Filter by category path prefix"),
+    search_mode: str = typer.Option("hybrid", "--search-mode", help="Search mode: hybrid, semantic, fts5"),
+    top_k: int = typer.Option(5, "--top-k", help="Number of search results"),
+    rag: bool = typer.Option(False, "--rag", help="Run RAG and score answers"),
+    baseline: bool = typer.Option(False, "--baseline", help="Save as baseline.json"),
+    compare: str = typer.Option(None, "--compare", help="Baseline name to compare against"),
+):
+    """Evaluate search and RAG quality against a test dataset."""
+    vault = Path.cwd()
+
+    # 1. Load dataset
+    dataset_path = vault / "eval" / "dataset.json"
+    if not dataset_path.is_file():
+        console.print(f"[red]Dataset not found: {dataset_path}[/red]")
+        raise typer.Exit(1)
+
+    queries = load_dataset(dataset_path)
+
+    # 2. Filter queries
+    queries = filter_queries(queries, subset=subset, category=category)
+
+    # 3. Handle empty results
+    if not queries:
+        console.print("[dim]No queries match the given filters.[/dim]")
+        return
+
+    # 4. Create context
+    ctx = _get_context(with_embedding=True, with_llm=True)
+
+    try:
+        # 5. Create EvalEngine
+        engine = EvalEngine(
+            db=ctx.db,
+            embedding=ctx.embedding,
+            vector_store=ctx.vector_store,
+            llm=ctx.llm,
+            search_mode=search_mode,
+            top_k=top_k,
+            with_rag=rag,
+        )
+
+        # 6. Run evaluation
+        result = engine.run(queries)
+
+        # 7. Save results
+        results_dir = vault / "eval" / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).isoformat().replace(":", "")
+        filename = f"{ts}.json"
+
+        if baseline:
+            filename = "baseline.json"
+            filepath = results_dir / filename
+        else:
+            filepath = results_dir / filename
+
+        filepath.write_text(
+            json.dumps(result.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        if baseline:
+            console.print(f"[green]Baseline saved to {filepath}[/green]")
+        else:
+            console.print(f"[green]Results saved to {filepath}[/green]")
+
+        # 8. Print summary table
+        s = result.summary
+        table = Table(title="Evaluation Results")
+        table.add_column("Metric", style="bold")
+        table.add_column("Value", style="cyan")
+
+        table.add_row("Total Queries", str(s.total))
+        table.add_row("Hit Rate", f"{s.hit_rate:.4f}")
+        table.add_row("Avg Rank", f"{s.avg_rank:.2f}" if s.avg_rank > 0 else "N/A")
+        table.add_row("MRR", f"{s.mrr:.4f}")
+        table.add_row("Keyword Score", f"{s.keyword_score:.4f}")
+        if s.llm_judge_avg is not None:
+            table.add_row("LLM Judge Avg", f"{s.llm_judge_avg:.2f}")
+        table.add_row("Overall", f"{s.overall:.4f}")
+
+        console.print(table)
+
+        # 9. Handle --compare
+        if compare:
+            compare_path = results_dir / f"{compare}.json"
+            if not compare_path.is_file():
+                console.print(f"[red]Baseline not found: {compare_path}[/red]")
+            else:
+                baseline_data = json.loads(compare_path.read_text(encoding="utf-8"))
+                baseline_result = _reconstruct_result(baseline_data)
+                diff = compare_results(result, baseline_result)
+
+                # Print diff table
+                diff_table = Table(title=f"Comparison vs {compare}")
+                diff_table.add_column("Metric", style="bold")
+                diff_table.add_column("Delta", style="cyan")
+
+                for metric, delta in diff["summary_diffs"].items():
+                    if delta is not None:
+                        color = "green" if delta >= 0 else "red"
+                        sign = "+" if delta > 0 else ""
+                        diff_table.add_row(metric, f"[{color}]{sign}{delta:.4f}[/{color}]")
+                    else:
+                        diff_table.add_row(metric, "N/A")
+
+                console.print(diff_table)
+
+                # Print degraded queries
+                if diff["degraded"]:
+                    console.print("\n[bold yellow]Degraded Queries:[/bold yellow]")
+                    deg_table = Table()
+                    deg_table.add_column("ID", style="bold")
+                    deg_table.add_column("Metric", style="cyan")
+                    deg_table.add_column("Before")
+                    deg_table.add_column("After", style="red")
+
+                    for deg in diff["degraded"]:
+                        deg_table.add_row(
+                            deg["id"],
+                            deg["metric"],
+                            str(deg["before"]),
+                            str(deg["after"]),
+                        )
+
+                    console.print(deg_table)
+
+    finally:
+        ctx.close()
 
 
 @app.command()
