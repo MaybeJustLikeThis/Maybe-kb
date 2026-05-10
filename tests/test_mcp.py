@@ -166,3 +166,30 @@ def test_kb_hybrid_search_returns_results(tmp_path: Path, monkeypatch: pytest.Mo
         assert result is not None
         assert len(result) > 0
     anyio.run(_run)
+
+
+def test_mcp_tools_present():
+    from kb.mcp_server import create_mcp_server
+    from kb.core.config import KBConfig, EmbeddingConfig, LLMConfig, SearchConfig, RAGConfig, ServerConfig
+    from pathlib import Path
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        vault = Path(tmp)
+        config = KBConfig(
+            vault_path=vault,
+            embedding=EmbeddingConfig(provider="local"),
+            llm=LLMConfig(provider="ollama"),
+            search=SearchConfig(),
+            rag=RAGConfig(),
+            server=ServerConfig(),
+        )
+        mcp = create_mcp_server(config)
+        tool_names = [t.name for t in mcp._tool_manager._tools.values()]
+        assert "kb_search" in tool_names
+        assert "kb_semantic_search" in tool_names
+        assert "kb_hybrid_search" in tool_names
+        assert "kb_read" in tool_names
+        assert "kb_list" in tool_names
+        assert "kb_add" in tool_names
+        assert "kb_rag_query" in tool_names

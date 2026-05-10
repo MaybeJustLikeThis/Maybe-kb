@@ -284,3 +284,106 @@ def test_semantic_search_finds_similar(client):
     data = resp.json()
     assert len(data) >= 1
     assert any("Python" in r["title"] for r in data)
+
+
+def test_get_note_path_traversal_blocked(client):
+    """GET /api/notes/../outside returns 403."""
+    resp = client.get("/api/notes/%2e%2e%2foutside")
+    assert resp.status_code == 403
+
+
+def test_get_note_not_found_body(client):
+    """GET /api/notes/nonexistent-note returns 404 with 'detail' in JSON body."""
+    resp = client.get("/api/notes/nonexistent-note")
+    assert resp.status_code == 404
+    assert "detail" in resp.json()
+
+
+def test_update_note_path_traversal_blocked(client):
+    """PUT /api/notes/../outside with json body returns 403."""
+    resp = client.put(
+        "/api/notes/%2e%2e%2foutside",
+        json={"title": "evil"},
+    )
+    assert resp.status_code == 403
+
+
+def test_delete_note_path_traversal_blocked(client):
+    """DELETE /api/notes/../outside returns 403."""
+    resp = client.delete("/api/notes/%2e%2e%2foutside")
+    assert resp.status_code == 403
+
+
+def test_search_mode_validation(client):
+    """GET /api/search?q=test&mode=fts5 returns 200, body is list."""
+    client.post("/api/notes", json={"title": "Test", "content": "Some content"})
+    resp = client.get("/api/search", params={"q": "test", "mode": "fts5"})
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_semantic_search_empty_results(client):
+    """GET /api/semantic-search?q=xyzabc123 returns 200, body is list."""
+    resp = client.get("/api/semantic-search", params={"q": "xyzabc123"})
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_tags_endpoint(client):
+    """GET /api/tags returns 200, body has 'tags' key."""
+    resp = client.get("/api/tags")
+    assert resp.status_code == 200
+    assert "tags" in resp.json()
+    assert isinstance(resp.json()["tags"], list)
+
+
+def test_categories_endpoint(client):
+    """GET /api/categories returns 200, body has 'categories' key."""
+    resp = client.get("/api/categories")
+    assert resp.status_code == 200
+    assert "categories" in resp.json()
+    assert isinstance(resp.json()["categories"], list)
+
+
+def test_index_status_endpoint(client):
+    """GET /api/index returns 200, body has 'notes_count' key."""
+    resp = client.get("/api/index")
+    assert resp.status_code == 200
+    assert "notes_count" in resp.json()
+
+
+def test_trigger_index_endpoint(client):
+    """POST /api/index returns 200, body has 'indexed' and 'vectors' keys."""
+    client.post("/api/notes", json={"title": "X", "content": "hello"})
+    resp = client.post("/api/index")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "indexed" in data
+    assert "vectors" in data
+
+
+def test_list_notes_default(client):
+    """GET /api/notes returns 200, body is list."""
+    resp = client.get("/api/notes")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_list_notes_by_tag(client):
+    """GET /api/notes?tag=python returns 200, body is list."""
+    client.post("/api/notes", json={"title": "Note P", "tags": ["python"], "content": "x"})
+    resp = client.get("/api/notes", params={"tag": "python"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert all("python" in n.get("tags", []) for n in data)
+
+
+def test_list_notes_by_category(client):
+    """GET /api/notes?category=tech returns 200, body is list."""
+    client.post("/api/notes", json={"title": "Note C", "category": "tech", "content": "x"})
+    resp = client.get("/api/notes", params={"category": "tech"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert all(n.get("category") == "tech" for n in data)

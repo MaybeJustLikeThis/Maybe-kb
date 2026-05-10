@@ -202,3 +202,81 @@ def test_kb_migrate_idempotent(kb_dir: Path):
 
     assert note.exists()
     assert "No root-level notes to migrate" in result.stdout or "Migrated 0" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Edge case tests (Task 3.4)
+# ---------------------------------------------------------------------------
+
+
+def test_kb_serve_params(kb_dir: Path):
+    """kb serve --help shows host, port, and watch options."""
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.stdout
+    assert "--port" in result.stdout
+    assert "--watch" in result.stdout
+
+
+def test_kb_ask_params(kb_dir: Path):
+    """kb ask --help shows --top-k and --stream options."""
+    result = runner.invoke(app, ["ask", "--help"])
+    assert result.exit_code == 0
+    assert "--top-k" in result.stdout
+    assert "--stream" in result.stdout
+
+
+def test_kb_ask_no_llm_config(kb_dir: Path):
+    """kb ask exits non-zero when no LLM config is set up."""
+    runner.invoke(app, ["init"])
+    result = runner.invoke(app, ["ask", "test question"])
+    assert result.exit_code != 0
+
+
+def test_kb_migrate_dry_run_init(kb_dir: Path):
+    """kb migrate --dry-run after init shows preview for root-level notes."""
+    runner.invoke(app, ["init"])
+    notes = kb_dir / "notes"
+    (notes / "root_note.md").write_text(
+        "---\ntitle: Root Note\ncategory: tech\n---\n\nContent.\n", encoding="utf-8"
+    )
+    result = runner.invoke(app, ["migrate", "--dry-run"])
+    assert result.exit_code == 0
+    assert "Would move" in result.stdout or "No root-level notes" in result.stdout
+
+
+def test_kb_migrate_no_notes_dir(kb_dir: Path):
+    """kb migrate fails with helpful message when notes/ does not exist."""
+    result = runner.invoke(app, ["migrate"])
+    assert result.exit_code != 0
+    assert "not found" in result.stdout
+
+
+def test_kb_tag_invalid_action(kb_dir: Path):
+    """kb tag with an invalid action name exits non-zero."""
+    runner.invoke(app, ["init"])
+    runner.invoke(app, ["add", "Test Note", "--tags", "demo"])
+
+    notes = list((kb_dir / "notes").rglob("*.md"))
+    assert len(notes) == 1
+    rel_path = notes[0].relative_to(kb_dir).as_posix()
+
+    result = runner.invoke(
+        app, ["tag", rel_path, "invalid", "--tags", "demo"]
+    )
+    assert result.exit_code != 0
+    assert "Unknown action" in result.stdout
+
+
+def test_kb_search_empty_query(kb_dir: Path):
+    """kb search without a query argument exits non-zero."""
+    result = runner.invoke(app, ["search"])
+    assert result.exit_code != 0
+
+
+def test_kb_init_in_existing(kb_dir: Path):
+    """kb init is idempotent — second init succeeds and config.toml still exists."""
+    runner.invoke(app, ["init"])
+    result = runner.invoke(app, ["init"])
+    assert result.exit_code == 0
+    assert (kb_dir / "config.toml").exists()
