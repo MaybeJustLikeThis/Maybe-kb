@@ -607,34 +607,30 @@ class EvalEngine:
             hit = score_hit(expected_source, results)
             rank = score_rank(expected_source, results)
 
-            # 3. RAG (optional)
+            # 3. Format context (reused by RAG and LLM judge)
+            from kb.core.rag import format_context
+            context_text = format_context(results[: self._top_k], self._db)
+
+            # 4. RAG (optional)
             answer = ""
             if self._with_rag and self._llm is not None:
-                from kb.core.rag import build_rag_prompt, format_context
-
-                context = format_context(results[: self._top_k], self._db)
-                prompt = build_rag_prompt(query_text, context)
+                from kb.core.rag import build_rag_prompt, RAG_SYSTEM_PROMPT
+                prompt = build_rag_prompt(query_text, context_text)
                 response = self._llm.generate(
-                    prompt,
-                    system_prompt=(
-                        "你是个人知识库助手。请基于用户提供的笔记内容"
-                        "回答问题。如果笔记中没有相关信息，请如实告知。"
-                        "回答时引用具体的笔记标题和内容片段。"
-                        "保持回答简洁准确，使用中文回复。"
-                    ),
+                    prompt, system_prompt=RAG_SYSTEM_PROMPT,
                 )
                 answer = response.text
 
-            # 4. Keyword scoring
+            # 5. Keyword scoring
             kw_score = score_keywords(answer, expected_keywords)
             keyword_score_sum += kw_score
 
-            # 5. LLM judge (optional)
+            # 6. LLM judge (optional)
             judge_score: int | None = None
             judge_reason: str | None = None
             if self._llm is not None and answer:
                 judge_score, judge_reason = llm_judge(
-                    query_text, answer, answer, self._llm
+                    query_text, answer, context_text, self._llm
                 )
                 judge_scores.append(judge_score)
 
