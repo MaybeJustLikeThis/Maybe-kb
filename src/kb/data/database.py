@@ -8,8 +8,6 @@ from typing import Any
 import jieba
 
 from kb.core.models import Note
-from kb.data.storage import chunk_text
-from kb.data.vector import VectorStore, VectorRecord
 
 # Suppress jieba startup logs
 jieba.setLogLevel(20)
@@ -37,7 +35,7 @@ class Database:
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(str(self._path))
+            self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
@@ -181,6 +179,7 @@ class Database:
         tag: str | None = None,
         status: str = "published",
         limit: int = 100,
+        sort: str | None = None,
     ) -> list[sqlite3.Row]:
         """List notes with optional filters."""
         conn = self._connect()
@@ -198,7 +197,10 @@ class Database:
             params.append(category)
 
         query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
+        if sort == "updated_at_desc":
+            query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
+        else:
+            query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
         params.append(limit)
 
         return conn.execute(query, params).fetchall()
@@ -253,48 +255,11 @@ class Database:
         ).fetchall()
         return [r["category"] for r in rows]
 
-
-def _index_vectors(
-    vault: Path,
-    db: Database,
-    provider: "EmbeddingProvider",
-    changed_ids: set[str],
-) -> int:
-    """Generate embeddings for changed notes and update LanceDB.
-
-    Only processes notes whose file_hash changed.
-    Deletes vectors for notes that no longer exist in changed_ids
-    but had vectors in the store.
-    Returns number of vector records indexed.
-    """
-    from kb.data.embedding import EmbeddingProvider as _EP
-
-    store = VectorStore(vault / ".kb" / "vectors.lance")
-    indexed = 0
-
-    try:
-        for file_id in changed_ids:
-            row = db.get_note(file_id)
-            if row is None:
-                store.delete_note(file_id)
-                continue
-            content = row["content"]
-            if not content:
-                continue
-            chunks = chunk_text(content)
-            embed_results = provider.embed_batch(chunks)
-            records = [
-                VectorRecord(
-                    id=file_id,
-                    chunk_id=i,
-                    vector=r.vector,
-                    text=chunks[i],
-                )
-                for i, r in enumerate(embed_results)
-            ]
-            store.upsert_chunks(file_id, records)
-            indexed += len(records)
-    finally:
-        store.close()
-
-    return indexed
+    def count_notes_by_category(self, category: str) -> int:
+        """Return the number of notes in a category."""
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM notes WHERE category = ? AND status = 'published'",
+            (category,),
+        ).fetchone()
+        return row["cnt"]
