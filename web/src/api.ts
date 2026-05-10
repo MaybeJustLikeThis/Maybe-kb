@@ -80,6 +80,10 @@ export const api = {
     return request<Array<Note & { score: number }>>(`/notes/${encodeURIComponent(fileId)}/related${qs}`)
   },
 
+  getIndexStatus() {
+    return request<{ notes_count: number }>('/index')
+  },
+
   getAttachmentsStats() {
     return request<{ count: number }>('/attachments/stats')
   },
