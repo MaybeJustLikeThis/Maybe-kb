@@ -75,6 +75,19 @@ export const api = {
     return request<{ indexed: number }>('/index', { method: 'POST' })
   },
 
+  getRelatedNotes(fileId: string, limit?: number) {
+    const qs = limit ? `?limit=${limit}` : ''
+    return request<Array<Note & { score: number }>>(`/notes/${encodeURIComponent(fileId)}/related${qs}`)
+  },
+
+  getAttachmentsStats() {
+    return request<{ count: number }>('/attachments/stats')
+  },
+
+  getCategoriesWithCount() {
+    return request<{ categories: Array<{ name: string; count: number }> }>('/categories?with_count=1')
+  },
+
   chatAsk(query: string, top_k?: number) {
     return request<{ answer: string; model: string; tokens_used: number }>('/chat/ask', {
       method: 'POST',
