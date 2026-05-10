@@ -1,6 +1,7 @@
 """Tests for kb eval CLI command."""
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -180,6 +181,14 @@ def test_eval_subset_filter(kb_with_dataset: Path):
     """Only queries matching --subset difficulty are evaluated."""
     from kb.cli import app
 
+    # Positive: 3 total queries, 2 are "easy" -- Total Queries row shows 2
+    result = runner.invoke(app, ["eval", "--subset", "easy"])
+    assert result.exit_code == 0
+    assert "Hit Rate" in result.output
+    assert "Total Queries" in result.output
+    assert _value_near_label(result.output, "Total Queries", "2")
+
+    # Negative: no queries have difficulty "medium"
     result = runner.invoke(app, ["eval", "--subset", "medium"])
     assert result.exit_code == 0
     assert "No queries match" in result.output
@@ -194,10 +203,14 @@ def test_eval_category_filter(kb_with_dataset: Path):
     """Only queries whose expected_source starts with the category prefix run."""
     from kb.cli import app
 
+    # Positive: q001 + q003 match "notes/tech/", q002 matches "notes/life/"
     result = runner.invoke(app, ["eval", "--category", "notes/tech/"])
     assert result.exit_code == 0
     assert "Hit Rate" in result.output
+    assert "Total Queries" in result.output
+    assert _value_near_label(result.output, "Total Queries", "2")
 
+    # Negative: no queries match "nonexistent" prefix
     result = runner.invoke(app, ["eval", "--category", "nonexistent"])
     assert result.exit_code == 0
     assert "No queries match" in result.output
@@ -299,5 +312,18 @@ def test_eval_search_mode_option(kb_with_dataset: Path):
         assert "MRR" in result.output
 
 
+# ---------------------------------------------------------------------------
+# Utility – verify a numeric value appears near a label in Rich table output
+# ---------------------------------------------------------------------------
 
+def _value_near_label(output: str, label: str, expected_value: str) -> bool:
+    """Check that *expected_value* appears near *label* in the output.
+
+    The Rich table renders box-drawing characters that may be garbled on
+    some platforms.  This uses a regex to find the label followed by
+    arbitrary characters, then the expected value – coping with broken
+    Unicode rendering.
+    """
+    pattern = re.escape(label) + r".*?" + re.escape(expected_value)
+    return bool(re.search(pattern, output, re.DOTALL))
 
