@@ -28,6 +28,11 @@ def note_row_to_dict(db: Database, row, *, include_content: bool = False) -> dic
         "created_at": row_dict.get("created_at"),
         "updated_at": row_dict.get("updated_at"),
         "status": row_dict.get("status", "published"),
+        "entry_type": row_dict.get("entry_type"),
+        "source_project": row_dict.get("source_project"),
+        "source_path": row_dict.get("source_path"),
+        "source_context": row_dict.get("source_context"),
+        "content_type": row_dict.get("content_type", "markdown"),
     }
 
     if include_content:
@@ -49,4 +54,9 @@ def note_to_response(note) -> dict:
         "created_at": note.created_at,
         "updated_at": note.updated_at,
         "status": note.status,
+        "entry_type": note.entry_type,
+        "source_project": note.source_project,
+        "source_path": note.source_path,
+        "source_context": note.source_context,
+        "content_type": note.content_type,
     }

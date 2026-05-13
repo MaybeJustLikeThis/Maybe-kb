@@ -168,6 +168,47 @@ def test_delete_note_not_found(tmp_path: Path):
         delete_note(vault, db, "notes/nonexistent.md")
 
 
+def test_note_response_includes_new_fields(tmp_path: Path):
+    """note_to_response includes entry_type and source fields."""
+    from kb.core.models import Note
+    from kb.core.serializers import note_to_response
+    note = Note(
+        file_id="notes/x.md", title="X", entry_type="tech-article",
+        source_project="kb", source_context="testing",
+    )
+    resp = note_to_response(note)
+    assert resp["entry_type"] == "tech-article"
+    assert resp["source_project"] == "kb"
+    assert resp["source_context"] == "testing"
+    assert resp["content_type"] == "markdown"
+
+
+def test_note_row_to_dict_includes_new_fields(tmp_path: Path):
+    """note_row_to_dict returns new fields from DB row."""
+    from kb.core.serializers import note_row_to_dict
+
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(vault, db, "Source Test", "content", category="tech", tags=["test"])
+    conn = db._connect()
+    conn.execute(
+        "UPDATE notes SET entry_type=?, source_project=?, source_context=? WHERE id=?",
+        ("tech-article", "kb", "testing source", note.file_id),
+    )
+    conn.commit()
+
+    row = db.get_note(note.file_id)
+    result = note_row_to_dict(db, row)
+    assert result["entry_type"] == "tech-article"
+    assert result["source_project"] == "kb"
+    assert result["source_context"] == "testing source"
+    db.close()
+
+
 def test_save_note_file_updates_timestamp(tmp_path: Path):
     """save_note_file sets updated_at and re-parses."""
     import time
