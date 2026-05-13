@@ -34,6 +34,11 @@ class NoteCreate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     tags: list[str] = Field(default_factory=list, max_length=50)
     description: str | None = Field(default=None, max_length=500)
+    entry_type: str | None = Field(default=None, max_length=50)
+    source_project: str | None = Field(default=None, max_length=200)
+    source_path: str | None = Field(default=None, max_length=500)
+    source_context: str | None = Field(default=None, max_length=500)
+    content_type: str = Field(default="markdown", max_length=50)
 
 
 class NoteUpdate(BaseModel):
@@ -43,6 +48,11 @@ class NoteUpdate(BaseModel):
     tags: list[str] | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=500)
     status: str | None = Field(default=None, max_length=20)
+    entry_type: str | None = Field(default=None, max_length=50)
+    source_project: str | None = Field(default=None, max_length=200)
+    source_path: str | None = Field(default=None, max_length=500)
+    source_context: str | None = Field(default=None, max_length=500)
+    content_type: str | None = Field(default=None, max_length=50)
 
 
 class ChatRequest(BaseModel):
@@ -82,6 +92,11 @@ def create_api_router(ctx: AppContext) -> APIRouter:
                 vault_path, ctx.db,
                 body.title, body.content,
                 body.category, body.tags, body.description,
+                entry_type=body.entry_type,
+                source_project=body.source_project,
+                source_path=body.source_path,
+                source_context=body.source_context,
+                content_type=body.content_type,
             )
         except ValueError:
             raise HTTPException(status_code=403, detail="Path traversal blocked")

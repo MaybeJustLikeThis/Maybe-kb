@@ -13,6 +13,10 @@ from watchdog.observers import Observer
 logger = logging.getLogger(__name__)
 
 
+_WATCHED_EXTENSIONS = {".md", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+
 class _DebouncedHandler(FileSystemEventHandler):
     """Watchdog handler that debounces rapid file changes before firing."""
 
@@ -22,6 +26,10 @@ class _DebouncedHandler(FileSystemEventHandler):
         self._debounce = debounce_ms / 1000.0
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
+
+    def _watched(self, path: str) -> bool:
+        return Path(path).suffix.lower() in _WATCHED_EXTENSIONS
+
 
     def _schedule(self):
         with self._lock:
@@ -39,19 +47,19 @@ class _DebouncedHandler(FileSystemEventHandler):
             logger.warning("File watch callback failed", exc_info=True)
 
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and self._watched(event.src_path):
             self._schedule()
 
     def on_modified(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and self._watched(event.src_path):
             self._schedule()
 
     def on_deleted(self, event):
-        if not event.is_directory and event.src_path.endswith(".md"):
+        if not event.is_directory and self._watched(event.src_path):
             self._schedule()
 
     def on_moved(self, event):
-        if not event.is_directory and event.dest_path.endswith(".md"):
+        if not event.is_directory and self._watched(event.dest_path):
             self._schedule()
 
     def stop(self):

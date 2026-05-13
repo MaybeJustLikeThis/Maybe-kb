@@ -73,13 +73,13 @@ def test_handler_ignores_non_md_files(tmp_path: Path) -> None:
         called.set()
 
     handler = _DebouncedHandler(callback=cb, debounce_ms=50)
-    event = FileCreatedEvent(str(tmp_path / "image.png"))
+    event = FileCreatedEvent(str(tmp_path / "notes.txt"))
     event.is_directory = False
     handler.on_created(event)
 
     # Should NOT fire — sleep past debounce and check
     time.sleep(0.15)
-    assert not called.is_set(), "Callback should NOT have been called for non-.md file"
+    assert not called.is_set(), "Callback should NOT have been called for non-watched file"
 
 
 # ---------------------------------------------------------------------------
