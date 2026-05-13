@@ -36,6 +36,39 @@ def test_store_deduplicates(tmp_path: Path):
     assert r1 == r2
 
 
+def test_store_attachment_uses_date_dirs(tmp_path: Path):
+    """store_attachment saves to attachments/YYYY/MM/ subdirectory."""
+    source = tmp_path / "test.png"
+    source.write_bytes(b"fake-png-data-123")
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    rel = store_attachment(source, vault)
+
+    assert rel.startswith("attachments/")
+    parts = rel.split("/")
+    assert len(parts) == 4  # attachments / YYYY / MM / filename
+    assert parts[1].isdigit() and len(parts[1]) == 4
+    assert parts[2].isdigit() and len(parts[2]) == 2
+    assert (vault / rel).is_file()
+
+
+def test_store_attachment_deduplication(tmp_path: Path):
+    """Same content → same stored file, not duplicated."""
+    source = tmp_path / "img.png"
+    source.write_bytes(b"unique-data")
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    rel1 = store_attachment(source, vault)
+    rel2 = store_attachment(source, vault)
+    assert rel1 == rel2
+    files = list((vault / "attachments").rglob("*"))
+    file_count = sum(1 for f in files if f.is_file())
+    assert file_count == 1
+
+
 def test_store_preserves_extension(tmp_path: Path):
     """Extension is preserved in stored filename."""
     source = tmp_path / "doc.pdf"

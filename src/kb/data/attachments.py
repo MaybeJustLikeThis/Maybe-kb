@@ -1,7 +1,8 @@
-"""Attachment storage with content-hash deduplication."""
+"""Attachment storage with content-hash deduplication and date-based directories."""
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from pathlib import Path
 
 ATTACHMENTS_DIR = "attachments"
@@ -16,11 +17,13 @@ def store_attachment(source: Path, vault_path: Path) -> str:
     """Store an attachment file, returning its relative path.
 
     Deduplicates by content hash: same content -> same stored file.
+    Uses date-based subdirectory: attachments/YYYY/MM/{hash}{ext}
     """
     data = source.read_bytes()
     ext = source.suffix.lower()
     hash_name = _content_hash(data)
-    rel_path = f"{ATTACHMENTS_DIR}/{hash_name}{ext}"
+    now = datetime.now()
+    rel_path = f"{ATTACHMENTS_DIR}/{now.year}/{now.month:02d}/{hash_name}{ext}"
 
     dest = vault_path / rel_path
     if not dest.exists():
