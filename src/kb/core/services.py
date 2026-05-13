@@ -58,6 +58,11 @@ def create_note(
     category: str | None = None,
     tags: list[str] | None = None,
     description: str | None = None,
+    entry_type: str | None = None,
+    source_project: str | None = None,
+    source_path: str | None = None,
+    source_context: str | None = None,
+    content_type: str = "markdown",
 ) -> Note:
     """Create a new note — slug generation, collision avoidance, file write, DB insert.
 
@@ -88,6 +93,11 @@ def create_note(
         description=description,
         created_at=now,
         updated_at=now,
+        entry_type=entry_type,
+        source_project=source_project,
+        source_path=source_path,
+        source_context=source_context,
+        content_type=content_type,
     )
 
     write_markdown_file(full_path, note)

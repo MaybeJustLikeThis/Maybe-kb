@@ -70,6 +70,16 @@ def _build_frontmatter_yaml(note: Note) -> str:
         data["attachments"] = note.attachments
     if note.status != "published":
         data["status"] = note.status
+    if note.entry_type:
+        data["type"] = note.entry_type
+    if note.source_project:
+        data["source_project"] = note.source_project
+    if note.source_path:
+        data["source_path"] = note.source_path
+    if note.source_context:
+        data["source_context"] = note.source_context
+    if note.content_type != "markdown":
+        data["content_type"] = note.content_type
 
     for k, v in note.extra_frontmatter.items():
         if k not in data:

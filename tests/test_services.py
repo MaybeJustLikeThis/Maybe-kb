@@ -209,6 +209,52 @@ def test_note_row_to_dict_includes_new_fields(tmp_path: Path):
     db.close()
 
 
+def test_create_note_with_entry_type_and_source(tmp_path: Path):
+    """create_note persists entry_type and source fields."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(
+        vault, db, "Source Note", "# Content",
+        category="tech", tags=["test"],
+        entry_type="design-decision",
+        source_project="kb",
+        source_context="architectural discussion",
+    )
+
+    assert note.entry_type == "design-decision"
+    assert note.source_project == "kb"
+    assert note.source_context == "architectural discussion"
+
+    row = db.get_note(note.file_id)
+    assert row["entry_type"] == "design-decision"
+    assert row["source_project"] == "kb"
+    db.close()
+
+
+def test_update_note_can_set_source_fields(tmp_path: Path):
+    """update_note can modify source tracking fields."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    created = create_note(vault, db, "Test", "content")
+    updated = update_note(vault, db, created.file_id,
+                          entry_type="troubleshooting",
+                          source_project="my-app",
+                          source_context="debugging session")
+
+    assert updated.entry_type == "troubleshooting"
+    assert updated.source_project == "my-app"
+    assert updated.source_context == "debugging session"
+    db.close()
+
+
 def test_save_note_file_updates_timestamp(tmp_path: Path):
     """save_note_file sets updated_at and re-parses."""
     import time
