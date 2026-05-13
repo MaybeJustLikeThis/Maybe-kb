@@ -55,17 +55,12 @@ class Note:
     updated_at: str | None = None
     status: str = "published"
     file_hash: str | None = None
-    entry_type: str = ""
-    source_project: str | None = None
-    source_path: str | None = None
-    source_context: str | None = None
-    content_type: str = "markdown"
-    extra_frontmatter: dict[str, Any] = field(default_factory=dict)
     entry_type: str | None = None
     source_project: str | None = None
     source_path: str | None = None
     source_context: str | None = None
     content_type: str = "markdown"
+    extra_frontmatter: dict[str, Any] = field(default_factory=dict)
 
     @property
     def tags_text(self) -> str:
