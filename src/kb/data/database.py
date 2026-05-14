@@ -289,3 +289,33 @@ class Database:
             (category,),
         ).fetchone()
         return row["cnt"]
+
+    def count_notes_by_entry_type(self) -> list[dict]:
+        """Return [{entry_type, count}] for all published notes."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT entry_type, COUNT(*) as cnt FROM notes "
+            "WHERE status = 'published' AND entry_type IS NOT NULL "
+            "GROUP BY entry_type ORDER BY cnt DESC"
+        ).fetchall()
+        return [{"entry_type": r["entry_type"], "count": r["cnt"]} for r in rows]
+
+    def list_source_projects(self) -> list[dict]:
+        """Return [{source_project, count}] for all published notes."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT source_project, COUNT(*) as cnt FROM notes "
+            "WHERE status = 'published' AND source_project IS NOT NULL "
+            "GROUP BY source_project ORDER BY cnt DESC"
+        ).fetchall()
+        return [{"source_project": r["source_project"], "count": r["cnt"]} for r in rows]
+
+    def count_notes_by_content_type(self) -> list[dict]:
+        """Return [{content_type, count}] for all published notes."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT content_type, COUNT(*) as cnt FROM notes "
+            "WHERE status = 'published' "
+            "GROUP BY content_type ORDER BY cnt DESC"
+        ).fetchall()
+        return [{"content_type": r["content_type"], "count": r["cnt"]} for r in rows]

@@ -19,6 +19,11 @@ export interface Note {
   created_at: string | null
   updated_at: string | null
   status: string
+  entry_type: string | null
+  source_project: string | null
+  source_path: string | null
+  source_context: string | null
+  content_type: string
 }
 
 export const api = {
@@ -90,6 +95,22 @@ export const api = {
 
   getCategoriesWithCount() {
     return request<{ categories: Array<{ name: string; count: number }> }>('/categories?with_count=1')
+  },
+
+  getTypeDistribution() {
+    return request<{ types: Array<{ name: string; count: number; label: string }> }>('/type-distribution')
+  },
+
+  getSourceProjects() {
+    return request<{ projects: Array<{ name: string; count: number }> }>('/source-projects')
+  },
+
+  getContentTypeStats() {
+    return request<{ content_types: Array<{ name: string; count: number }> }>('/content-type-stats')
+  },
+
+  getIndexHealth() {
+    return request<{ notes_count: number; vectors_count: number; coverage: number }>('/index-health')
   },
 
   chatAsk(query: string, top_k?: number) {

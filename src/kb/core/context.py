@@ -21,6 +21,7 @@ class AppContext:
 
     vault: Path
     db: Database
+    config: KBConfig | None = None
     embedding: EmbeddingProvider | None = None
     llm: LLMProvider | None = None
     vector_store: VectorStore | None = None
@@ -63,6 +64,7 @@ class AppContext:
         return cls(
             vault=vault,
             db=db,
+            config=config,
             embedding=embedding,
             llm=llm,
             vector_store=vector_store,
