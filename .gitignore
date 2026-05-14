@@ -13,3 +13,7 @@ web/dist/
 eval/results/
 .worktrees/
 .superpowers/
+*.log
+.playwright-mcp/
+web/screenshots/
+.claude/
