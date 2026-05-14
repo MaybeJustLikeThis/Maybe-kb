@@ -168,6 +168,93 @@ def test_delete_note_not_found(tmp_path: Path):
         delete_note(vault, db, "notes/nonexistent.md")
 
 
+def test_note_response_includes_new_fields(tmp_path: Path):
+    """note_to_response includes entry_type and source fields."""
+    from kb.core.models import Note
+    from kb.core.serializers import note_to_response
+    note = Note(
+        file_id="notes/x.md", title="X", entry_type="tech-article",
+        source_project="kb", source_context="testing",
+    )
+    resp = note_to_response(note)
+    assert resp["entry_type"] == "tech-article"
+    assert resp["source_project"] == "kb"
+    assert resp["source_context"] == "testing"
+    assert resp["content_type"] == "markdown"
+
+
+def test_note_row_to_dict_includes_new_fields(tmp_path: Path):
+    """note_row_to_dict returns new fields from DB row."""
+    from kb.core.serializers import note_row_to_dict
+
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(vault, db, "Source Test", "content", category="tech", tags=["test"])
+    conn = db._connect()
+    conn.execute(
+        "UPDATE notes SET entry_type=?, source_project=?, source_context=? WHERE id=?",
+        ("tech-article", "kb", "testing source", note.file_id),
+    )
+    conn.commit()
+
+    row = db.get_note(note.file_id)
+    result = note_row_to_dict(db, row)
+    assert result["entry_type"] == "tech-article"
+    assert result["source_project"] == "kb"
+    assert result["source_context"] == "testing source"
+    db.close()
+
+
+def test_create_note_with_entry_type_and_source(tmp_path: Path):
+    """create_note persists entry_type and source fields."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(
+        vault, db, "Source Note", "# Content",
+        category="tech", tags=["test"],
+        entry_type="design-decision",
+        source_project="kb",
+        source_context="architectural discussion",
+    )
+
+    assert note.entry_type == "design-decision"
+    assert note.source_project == "kb"
+    assert note.source_context == "architectural discussion"
+
+    row = db.get_note(note.file_id)
+    assert row["entry_type"] == "design-decision"
+    assert row["source_project"] == "kb"
+    db.close()
+
+
+def test_update_note_can_set_source_fields(tmp_path: Path):
+    """update_note can modify source tracking fields."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    created = create_note(vault, db, "Test", "content")
+    updated = update_note(vault, db, created.file_id,
+                          entry_type="troubleshooting",
+                          source_project="my-app",
+                          source_context="debugging session")
+
+    assert updated.entry_type == "troubleshooting"
+    assert updated.source_project == "my-app"
+    assert updated.source_context == "debugging session"
+    db.close()
+
+
 def test_save_note_file_updates_timestamp(tmp_path: Path):
     """save_note_file sets updated_at and re-parses."""
     import time

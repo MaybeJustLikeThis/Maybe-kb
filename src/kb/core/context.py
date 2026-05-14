@@ -24,6 +24,7 @@ class AppContext:
     embedding: EmbeddingProvider | None = None
     llm: LLMProvider | None = None
     vector_store: VectorStore | None = None
+    suggestion_engine: object | None = field(default=None, init=False)
     _closed: bool = field(default=False, init=False)
 
     @classmethod

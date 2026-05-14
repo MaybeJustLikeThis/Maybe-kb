@@ -57,3 +57,50 @@ def test_note_tags_text():
         file_path="test.md",
     )
     assert note.tags_text == "vue pinia"
+
+
+def test_note_new_source_fields():
+    """Note supports entry_type and source tracking fields."""
+    note = Note(
+        file_id="notes/test/example.md",
+        title="测试笔记",
+        content="内容",
+        entry_type="tech-article",
+        source_project="kb",
+        source_path="/home/user/projects/kb",
+        source_context="在实现搜索功能时的笔记",
+        content_type="markdown",
+    )
+    assert note.entry_type == "tech-article"
+    assert note.source_project == "kb"
+    assert note.source_path == "/home/user/projects/kb"
+    assert note.source_context == "在实现搜索功能时的笔记"
+    assert note.content_type == "markdown"
+
+
+def test_note_new_fields_defaults():
+    """New fields have sensible defaults."""
+    note = Note(file_id="x", title="x")
+    assert note.entry_type is None
+    assert note.source_project is None
+    assert note.source_path is None
+    assert note.source_context is None
+    assert note.content_type == "markdown"
+
+
+def test_note_from_frontmatter_extracts_new_fields():
+    """from_frontmatter parses entry_type and source fields."""
+    fm = {
+        "title": "Test",
+        "type": "troubleshooting",
+        "source_project": "my-app",
+        "source_path": "/code/my-app",
+        "source_context": "debugging login bug",
+        "content_type": "markdown",
+    }
+    note = Note.from_frontmatter(title="Test", frontmatter=fm, file_path="notes/x.md")
+    assert note.entry_type == "troubleshooting"
+    assert note.source_project == "my-app"
+    assert note.source_path == "/code/my-app"
+    assert note.source_context == "debugging login bug"
+    assert note.content_type == "markdown"
