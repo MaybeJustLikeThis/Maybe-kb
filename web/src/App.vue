@@ -72,6 +72,7 @@ const tb = useTopBar()
 const navItems = [
   { to: '/', label: 'Overview', icon: '🏠' },
   { to: '/notes', label: 'Notes', icon: '📄' },
+  { to: '/manage', label: 'Manage', icon: '📊' },
   { to: '/search', label: 'Search', icon: '🔍' },
   { to: '/chat', label: 'Chat', icon: '💬' },
 ]

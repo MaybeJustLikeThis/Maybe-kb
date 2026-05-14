@@ -241,6 +241,56 @@ def create_api_router(ctx: AppContext) -> APIRouter:
         count, vec_count = index_files(vault_path, ctx.db, full=True, embedding_provider=ctx.embedding)
         return {"indexed": count, "vectors": vec_count}
 
+    @router.get("/type-distribution")
+    def get_type_distribution():
+        rows = ctx.db.count_notes_by_entry_type()
+        labels = {}
+        if ctx.config and ctx.config.kb_types:
+            labels = {name: t.label for name, t in ctx.config.kb_types.items()}
+        return {
+            "types": [
+                {"name": r["entry_type"], "count": r["count"],
+                 "label": labels.get(r["entry_type"], r["entry_type"])}
+                for r in rows
+            ]
+        }
+
+    @router.get("/source-projects")
+    def get_source_projects():
+        rows = ctx.db.list_source_projects()
+        return {
+            "projects": [
+                {"name": r["source_project"], "count": r["count"]}
+                for r in rows
+            ]
+        }
+
+    @router.get("/content-type-stats")
+    def get_content_type_stats():
+        rows = ctx.db.count_notes_by_content_type()
+        return {
+            "content_types": [
+                {"name": r["content_type"], "count": r["count"]}
+                for r in rows
+            ]
+        }
+
+    @router.get("/index-health")
+    def get_index_health():
+        notes_count = len(ctx.db.get_all_hashes())
+        vectors_count = 0
+        if ctx.vector_store is not None:
+            try:
+                vectors_count = ctx.vector_store.count()
+            except Exception:
+                vectors_count = 0
+        coverage = 1.0 if vectors_count > 0 else 0.0
+        return {
+            "notes_count": notes_count,
+            "vectors_count": vectors_count,
+            "coverage": coverage,
+        }
+
     @router.post("/chat/ask")
     def chat_ask(body: ChatRequest):
         if ctx.llm is None or ctx.embedding is None:
