@@ -11,7 +11,7 @@
 | Phase 1 | CLI 核心（CRUD / FTS5 全文搜索 / 增量索引） | ✓ 完成 |
 | Phase 2 | Web UI（FastAPI + Vue 3 + Markdown 编辑器） | ✓ 完成 |
 | Phase 3 | 语义搜索 + MCP Server（LanceDB + BGE + 混合搜索 RRF） | ✓ 完成 |
-| Phase 4 | RAG 对话（LLM Provider + 对话历史 + CLI/API/Web/MCP） | ✓ 完成 |
+| Phase 4 | RAG 对话（LLM Provider + CLI/API/Web/MCP） | ✓ 完成 |
 | Phase 5 | Hexo 自动同步 + 相关笔记推荐（watchdog 监听 + 语义关联） | ✓ 完成 |
 | Phase 6 | 评测体系（数据集生成 / kb eval / 评分引擎 / 基线对比） | ✓ 完成 |
 
@@ -22,12 +22,12 @@
 - **语义搜索**：BGE-small-zh embedding + LanceDB 向量存储
 - **混合搜索**：RRF（Reciprocal Rank Fusion）融合全文与语义结果
 - **增量索引**：SHA256 文件哈希检测变更，仅索引变化文件
-- **Web UI**：Vue 3 + Tailwind CSS，笔记浏览 / Markdown 编辑 / 搜索 / 附件上传
+- **Web UI**：Vue 3 + Tailwind CSS，Dashboard 概览 / 笔记浏览 / Markdown 编辑（语法高亮）/ 搜索 / 附件上传
 - **MCP Server**：7 个工具（kb_search / kb_semantic_search / kb_hybrid_search / kb_read / kb_list / kb_add / kb_rag_query）
 - **RAG 对话**：多 LLM 提供商（Ollama / OpenAI / Anthropic），一键配置切换
 - **CLI 问答**：`kb ask "问题"` 命令行 RAG 查询，支持流式输出
-- **Web Chat**：ChatPage 聊天面板，多轮对话界面
-- **对话历史**：SQLite 持久化聊天会话和消息
+- **Web Chat**：ChatPage 聊天气泡界面，打字动画，自动滚动
+- **笔记详情**：阅读 / 编辑双模式切换，相关笔记推荐
 - **路径安全**：所有文件操作统一防穿越
 - **多设备同步**：Markdown 文件通过 Git 同步，索引每台设备独立生成
 - **Hexo 自动同步**：配置 `watch_dir` 后，`kb serve` 启动即同步博客文章，持续监听变更
@@ -70,10 +70,13 @@ kb/
 │   ├── core/                   # 领域逻辑层
 │   │   ├── models.py           # Note 数据模型（dataclass）
 │   │   ├── config.py           # KBConfig 配置管理（frozen dataclass）
+│   │   ├── context.py          # AppContext 统一资源容器
 │   │   ├── services.py         # 共享 CRUD 服务编排
 │   │   ├── search.py           # 混合搜索 RRF 融合
+│   │   ├── indexer.py          # 索引编排（文件发现 / 同步 / 向量化）
 │   │   ├── rag.py              # RAG 编排（搜索→组装→生成）
 │   │   ├── eval.py             # 评测引擎（评分/LLM 裁判/基线对比）
+│   │   ├── serializers.py     # 统一序列化（Note → API dict）
 │   │   ├── watcher.py          # 文件监听（watchdog，自动索引）
 │   │
 │   └── data/                   # 数据持久化层
@@ -82,19 +85,28 @@ kb/
 │       ├── vector.py           # LanceDB 向量存储
 │       ├── embedding.py        # Embedding Provider 抽象（local + openai）
 │       ├── llm.py              # LLM Provider 抽象（ollama / openai / anthropic）
-│       ├── chat_history.py     # 对话历史 SQLite 存储
 │       └── attachments.py      # 附件存储（内容哈希去重）
 │
 ├── web/                        # 前端（Vue 3 + Vite + Tailwind CSS）
+│   ├── scripts/
+│   │   └── kill-port.js        # 开发前清理端口占用
 │   └── src/
 │       ├── App.vue
+│       ├── topBar.ts           # 顶部工具栏状态管理
+│       ├── assets/
+│       │   └── base.css        # 全局基础样式 + CSS 变量
 │       ├── pages/
+│       │   ├── DashboardPage.vue
 │       │   ├── NoteList.vue
 │       │   ├── NoteDetail.vue
 │       │   ├── SearchPage.vue
 │       │   └── ChatPage.vue
 │       └── components/
-│           └── MarkdownEditor.vue
+│           ├── MarkdownEditor.vue
+│           ├── StatCard.vue
+│           ├── CategoryList.vue
+│           ├── TagCloud.vue
+│           └── RecentNotes.vue
 │
 └── tests/                      # 测试
     ├── test_cli.py
@@ -107,7 +119,8 @@ kb/
     ├── test_search.py
     ├── test_rag.py
     ├── test_llm.py
-    ├── test_chat_history.py
+    ├── test_indexer.py
+    ├── test_dashboard.py
     ├── test_mcp.py
     ├── test_eval.py
     ├── test_eval_cli.py
