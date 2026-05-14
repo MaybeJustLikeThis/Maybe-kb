@@ -20,6 +20,7 @@ dependencies = [
     "lancedb>=0.4",
     "sentence-transformers>=2.2",
     "mcp>=1.0",
+    "watchdog>=4.0",
 ]
 
 [project.optional-dependencies]

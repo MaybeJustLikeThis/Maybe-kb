@@ -36,6 +36,7 @@ class RAGConfig:
 class ServerConfig:
     host: str = "127.0.0.1"
     port: int = 8420
+    watch_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,5 +88,6 @@ def load_config(base_path: Path) -> KBConfig:
         server=ServerConfig(
             host=server_data.get("host", "127.0.0.1"),
             port=server_data.get("port", 8420),
+            watch_dir=server_data.get("watch_dir"),
         ),
     )

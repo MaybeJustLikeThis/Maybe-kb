@@ -4,61 +4,45 @@ from __future__ import annotations
 from pathlib import Path
 
 from kb.core.config import KBConfig
+from kb.core.context import AppContext
 from kb.core.rag import rag_query
 from kb.core.search import hybrid_search
+from kb.core.serializers import note_row_to_dict
 from kb.core import services
-from kb.data.database import Database
-from kb.data.embedding import create_embedding_provider
-from kb.data.llm import create_llm_provider
-from kb.data.vector import VectorStore
 
 
 def create_mcp_server(config: KBConfig):
     """Create MCP server with knowledge base tools.
 
-    Follows the same factory pattern as create_api_router() in routes.py.
     All tools call the shared services module for CRUD operations.
-    Database is lazy-initialized on first tool call.
+    Resources are initialized once via AppContext and shared across tools.
     """
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP("kb")
-    vault = config.vault_path
-    db_path = vault / ".kb" / "kb.db"
-    provider = create_embedding_provider(config.embedding)
-
-    _initialized = False
-
-    def get_db() -> Database:
-        nonlocal _initialized
-        db = Database(db_path)
-        if not _initialized:
-            db.initialize()
-            _initialized = True
-        return db
+    ctx = AppContext.from_config(config)
+    vault = ctx.vault
+    db = ctx.db
+    provider = ctx.embedding
+    llm = ctx.llm
+    store = ctx.vector_store
 
     @mcp.tool()
     def kb_search(query: str, limit: int = 20) -> list[dict]:
         """Full-text search using FTS5 + jieba Chinese tokenization."""
-        db = get_db()
         rows = db.search_fulltext(query, limit=limit)
-        return [_tool_note_dict(dict(row), db) for row in rows]
+        return [note_row_to_dict(db, dict(row)) for row in rows]
 
     @mcp.tool()
     def kb_semantic_search(query: str, limit: int = 20) -> list[dict]:
         """Semantic search using BGE-small-zh embedding + LanceDB cosine similarity."""
-        db = get_db()
         embed_result = provider.embed(query)
-        store = VectorStore(vault / ".kb" / "vectors.lance")
-        try:
-            records = store.search(embed_result.vector, limit=limit)
-        finally:
-            store.close()
+        records = store.search(embed_result.vector, limit=limit)
         results = []
         for r in records:
             row = db.get_note(r.id)
             if row is not None:
-                item = _tool_note_dict(dict(row), db)
+                item = note_row_to_dict(db, dict(row))
                 item["chunk_text"] = r.text
                 results.append(item)
         return results
@@ -66,12 +50,7 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
-        db = get_db()
-        store = VectorStore(vault / ".kb" / "vectors.lance")
-        try:
-            results = hybrid_search(query, db, provider, store, limit)
-        finally:
-            store.close()
+        results = hybrid_search(query, db, provider, store, limit)
         return [
             {"file_id": r.file_id, "title": r.title,
              "score": r.score, "source": r.source}
@@ -100,13 +79,12 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_list(category: str = "", tag: str = "", limit: int = 50) -> list[dict]:
         """List notes with optional category/tag filter."""
-        db = get_db()
         rows = db.list_notes(
             category=category or None,
             tag=tag or None,
             limit=limit,
         )
-        return [_tool_note_dict(dict(row), db) for row in rows]
+        return [note_row_to_dict(db, dict(row)) for row in rows]
 
     @mcp.tool()
     def kb_add(title: str, content: str, category: str = "",
@@ -114,7 +92,6 @@ def create_mcp_server(config: KBConfig):
         """Create a new note. tags is comma-separated."""
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         cat = category if category else None
-        db = get_db()
         try:
             note = services.create_note(
                 vault, db, title, content,
@@ -131,13 +108,7 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_rag_query(query: str, top_k: int = 5) -> dict:
         """RAG query: hybrid search + LLM answer over your knowledge base."""
-        llm = create_llm_provider(config.llm)
-        db = get_db()
-        store = VectorStore(vault / ".kb" / "vectors.lance")
-        try:
-            response = rag_query(query, db, provider, store, llm, top_k=top_k)
-        finally:
-            store.close()
+        response = rag_query(query, db, provider, store, llm, top_k=top_k)
         return {
             "answer": response.text,
             "model": response.model,
@@ -145,18 +116,3 @@ def create_mcp_server(config: KBConfig):
         }
 
     return mcp
-
-
-def _tool_note_dict(row: dict, db: Database) -> dict:
-    """Build note dict from DB row with tags."""
-    tags = db.get_tags(row.get("id", ""))
-    return {
-        "file_id": row.get("id", ""),
-        "title": row.get("title", ""),
-        "description": row.get("description"),
-        "category": row.get("category"),
-        "tags": tags,
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
-        "status": row.get("status", "published"),
-    }

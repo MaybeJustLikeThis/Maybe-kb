@@ -6,7 +6,7 @@ max_results = 20
 
 [embedding]
 provider = "local"
-model = "BGE-small-zh"
+model = "BAAI/bge-small-zh-v1.5"
 
 [llm]
 provider = "ollama"
@@ -15,3 +15,4 @@ model = "qwen2.5:7b"
 [server]
 host = "127.0.0.1"
 port = 8420
+watch_dir = "C:/Users/cherry/Desktop/项目/blog_new/blog_new/source/_posts"

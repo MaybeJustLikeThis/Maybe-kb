@@ -4,13 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "predev": "node scripts/kill-port.js",
+    "dev": "vite --host 127.0.0.1 --port 3030 --strictPort",
+    "prepreview": "node scripts/kill-port.js",
+    "preview": "vite preview --host 127.0.0.1 --port 3030 --strictPort",
+    "build": "vite build"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "dompurify": "^3.4.2",
+    "highlight.js": "^11.11.1",
     "marked": "^12.0.0",
+    "marked-highlight": "^2.2.4",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
   },

@@ -11,3 +11,5 @@ build/
 node_modules/
 web/dist/
 eval/results/
+.worktrees/
+.superpowers/

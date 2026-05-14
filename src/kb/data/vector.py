@@ -36,7 +36,7 @@ class VectorStore:
         self._db = lancedb.connect(str(self._path))
         try:
             self._table = self._db.open_table("chunks")
-        except Exception:
+        except ValueError:
             self._table = None
 
     def close(self) -> None:
@@ -68,16 +68,13 @@ class VectorStore:
         self._connect()
         if self._table is None:
             return []
-        try:
-            results = (
-                self._table
-                .search(query_vector, vector_column_name="vector")
-                .metric("cosine")
-                .limit(limit)
-                .to_list()
-            )
-        except (ValueError, RuntimeError, OSError):
-            return []
+        results = (
+            self._table
+            .search(query_vector, vector_column_name="vector")
+            .metric("cosine")
+            .limit(limit)
+            .to_list()
+        )
         return [
             VectorRecord(
                 id=r["id"],
@@ -92,7 +89,4 @@ class VectorStore:
         self._connect()
         if self._table is None:
             return 0
-        try:
-            return self._table.count_rows()
-        except (ValueError, RuntimeError, OSError):
-            return 0
+        return self._table.count_rows()

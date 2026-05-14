@@ -1,6 +1,7 @@
 """FastAPI server for kb Web UI."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +9,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from kb.core.config import KBConfig
+from kb.core.context import AppContext
 from kb.routes import create_api_router
 
 
@@ -24,12 +26,16 @@ def _resolve_static_path(static_dir: Path, full_path: str) -> Path:
 
 def create_app(kb_config: KBConfig) -> FastAPI:
     """Create the FastAPI application with all endpoints."""
-    app = FastAPI(title="kb", version="0.1.0")
+    ctx = AppContext.from_config(kb_config)
 
-    vault_path = kb_config.vault_path
-    db_path = vault_path / ".kb" / "kb.db"
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        ctx.close()
 
-    router = create_api_router(vault_path, db_path, kb_config.embedding, kb_config.llm)
+    app = FastAPI(title="kb", version="0.1.0", lifespan=lifespan)
+
+    router = create_api_router(ctx)
     app.include_router(router, prefix="/api")
 
     # Serve frontend static files (production mode — built files in web/dist/)

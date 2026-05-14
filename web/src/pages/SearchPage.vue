@@ -1,39 +1,52 @@
 <template>
   <div>
-    <h2 class="text-2xl font-bold mb-4">Search</h2>
+    <h2 class="text-2xl font-bold mb-5" style="color: var(--color-text);">Search</h2>
 
-    <div class="mb-6">
+    <!-- Search input with icon -->
+    <div class="relative mb-6">
+      <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg" style="color: var(--color-text-muted);">🔍</span>
       <input
         v-model="query"
         @keyup.enter="search"
-        class="w-full p-3 border rounded-lg text-lg outline-none focus:ring-2 focus:ring-blue-300"
+        class="input pl-10 text-base"
         placeholder="Search notes..."
         autofocus
       />
     </div>
 
-    <div v-if="searching" class="text-gray-500">Searching...</div>
+    <!-- Loading -->
+    <div v-if="searching" class="empty-state">
+      <div class="empty-state-icon">⏳</div>
+      <p>Searching...</p>
+    </div>
 
+    <!-- Results -->
     <div v-else-if="results.length > 0">
-      <p class="text-sm text-gray-500 mb-4">{{ results.length }} results for "{{ lastQuery }}"</p>
-      <ul class="space-y-3">
+      <p class="text-sm mb-4" style="color: var(--color-text-muted);">
+        {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}"
+      </p>
+      <ul class="space-y-2">
         <li v-for="note in results" :key="note.file_id">
           <router-link
             :to="`/note/${encodeURIComponent(note.file_id)}`"
-            class="block bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow"
+            class="card block"
           >
-            <h3 class="font-semibold text-lg">{{ note.title }}</h3>
-            <div class="flex gap-2 mt-1">
-              <span v-if="note.category" class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{{ note.category }}</span>
-              <span v-for="tag in note.tags" :key="tag" class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ tag }}</span>
+            <h3 class="font-semibold" style="color: var(--color-text);">{{ note.title }}</h3>
+            <div class="flex flex-wrap gap-1.5 mt-1.5">
+              <span v-if="note.category" class="badge badge-primary">{{ note.category }}</span>
+              <span v-for="tag in note.tags" :key="tag" class="badge badge-muted">{{ tag }}</span>
             </div>
-            <p v-if="note.description" class="text-sm text-gray-500 mt-2">{{ note.description }}</p>
+            <p v-if="note.description" class="text-sm mt-2" style="color: var(--color-text-secondary);">{{ note.description }}</p>
           </router-link>
         </li>
       </ul>
     </div>
 
-    <div v-else-if="lastQuery" class="text-gray-500">No results found for "{{ lastQuery }}".</div>
+    <!-- No results -->
+    <div v-else-if="lastQuery" class="empty-state">
+      <div class="empty-state-icon">🔎</div>
+      <p>No results found for "{{ lastQuery }}".</p>
+    </div>
   </div>
 </template>
 

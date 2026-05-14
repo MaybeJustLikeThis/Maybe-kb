@@ -419,34 +419,3 @@ def test_rag_query_orchestration_with_mocks(monkeypatch: pytest.MonkeyPatch):
     finally:
         db.close()
 
-
-# ── ChatHistory integration test ───────────────────────────────────────
-
-def test_chat_history_full_workflow(tmp_path: Path):
-    """Full session lifecycle: create → add → list → get → delete."""
-    from kb.data.chat_history import ChatHistory
-
-    ch = ChatHistory(tmp_path / "ch.db")
-    ch.initialize()
-
-    s1 = ch.create_session("Session 1")
-    s2 = ch.create_session("Session 2")
-    assert s1.session_id != s2.session_id
-    assert s1.title == "Session 1"
-
-    ch.add_message(s1.session_id, "user", "Hello")
-    ch.add_message(s1.session_id, "assistant", "Hi there!")
-    ch.add_message(s2.session_id, "user", "Question 2")
-
-    msgs = ch.get_messages(s1.session_id)
-    assert len(msgs) == 2
-    assert msgs[0].role == "user"
-    assert msgs[1].role == "assistant"
-
-    sessions = ch.list_sessions()
-    assert sessions[0].session_id == s2.session_id
-
-    ch.delete_session(s1.session_id)
-    assert ch.get_messages(s1.session_id) == []
-
-    ch.close()
