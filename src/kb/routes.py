@@ -232,7 +232,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
         att_dir = vault_path / "attachments"
         if not att_dir.is_dir():
             return {"count": 0}
-        count = sum(1 for f in att_dir.iterdir() if f.is_file())
+        count = sum(1 for f in att_dir.rglob("*") if f.is_file())
         return {"count": count}
 
     @router.post("/index")

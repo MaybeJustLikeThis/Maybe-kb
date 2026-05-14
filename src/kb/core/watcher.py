@@ -74,7 +74,7 @@ def start_watcher(
     callback: Callable[[], None],
     debounce_ms: int = 200,
 ) -> Observer:
-    """Start a watchdog observer monitoring watch_dir for .md file changes.
+    """Start a watchdog observer monitoring watch_dir for file changes.
 
     Returns the started Observer; caller must call observer.stop() + observer.join()
     to shut down cleanly.

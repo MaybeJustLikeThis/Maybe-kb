@@ -74,6 +74,11 @@ def create_mcp_server(config: KBConfig):
             "created_at": note.created_at,
             "updated_at": note.updated_at,
             "status": note.status,
+            "entry_type": note.entry_type,
+            "source_project": note.source_project,
+            "source_path": note.source_path,
+            "source_context": note.source_context,
+            "content_type": note.content_type,
         }
 
     @mcp.tool()
