@@ -1,7 +1,7 @@
 <template>
   <div>
     <div v-if="loading" class="empty-state">
-      <div class="empty-state-icon">⏳</div>
+      <div class="empty-state-icon">...</div>
       <p>Loading...</p>
     </div>
 
@@ -10,15 +10,15 @@
       <template v-if="!isEditing">
         <h1 class="text-3xl font-bold mb-3" style="color: var(--color-text);">{{ title }}</h1>
 
-        <!-- Metadata row with dot separators -->
+        <!-- Metadata row with separators -->
         <div class="flex items-center gap-1.5 text-sm mb-8 flex-wrap" style="color: var(--color-text-muted);">
           <span v-if="category" class="badge badge-primary">{{ category }}</span>
-          <span v-if="category && tags.length > 0" style="color: var(--color-border);">·</span>
+          <span v-if="category && tags.length > 0" style="color: var(--color-border);">/</span>
           <template v-for="(tag, i) in tags" :key="tag">
             <span class="badge badge-muted">{{ tag }}</span>
-            <span v-if="i < tags.length - 1" style="color: var(--color-border);">·</span>
+            <span v-if="i < tags.length - 1" style="color: var(--color-border);">/</span>
           </template>
-          <span v-if="(category || tags.length > 0) && noteUpdatedAt" style="color: var(--color-border);">·</span>
+          <span v-if="(category || tags.length > 0) && noteUpdatedAt" style="color: var(--color-border);">/</span>
           <span v-if="noteUpdatedAt">{{ noteUpdatedAt }}</span>
         </div>
 
@@ -63,7 +63,7 @@
               <span class="font-medium" style="color: var(--color-primary);">{{ note.title }}</span>
               <div v-if="note.category" class="text-xs mt-1" style="color: var(--color-text-muted);">
                 {{ note.category }}
-                <span v-if="note.tags.length"> · {{ note.tags.slice(0, 3).join(', ') }}</span>
+                <span v-if="note.tags.length"> / {{ note.tags.slice(0, 3).join(', ') }}</span>
               </div>
             </div>
             <span class="text-xs flex-shrink-0 ml-3" style="color: var(--color-text-muted);">{{ (note.score * 100).toFixed(0) }}%</span>

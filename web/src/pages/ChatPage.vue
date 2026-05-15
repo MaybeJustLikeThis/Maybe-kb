@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import { api } from '../api'
+import { api, ApiError } from '../api'
 
 interface ChatMessage {
   id: number
@@ -88,7 +88,10 @@ async function ask() {
     const res = await api.chatAsk(q)
     messages.value.push({ id: ++nextId, role: 'assistant', content: res.answer })
   } catch (e) {
-    const message = e instanceof Error && e.message.includes('config required')
+    const providerNotConfigured = e instanceof ApiError
+      ? e.code === 'PROVIDER_NOT_CONFIGURED'
+      : e instanceof Error && e.message.includes('config required')
+    const message = providerNotConfigured
       ? 'Chat providers are not configured yet. Configure LLM and embedding providers, then ask again.'
       : `Error: ${e instanceof Error ? e.message : 'Unknown error'}`
     messages.value.push({ id: ++nextId, role: 'assistant', content: message })
@@ -232,6 +235,8 @@ watch(() => messages.value.length, async () => {
   color: inherit;
   font-size: 0.9rem;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .command-bar {

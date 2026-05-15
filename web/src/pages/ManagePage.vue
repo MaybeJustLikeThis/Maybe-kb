@@ -3,13 +3,13 @@
     <h2 class="text-2xl font-bold mb-6" style="color: var(--color-text);">Manage</h2>
 
     <div v-if="loading" class="empty-state">
-      <div class="empty-state-icon">⏳</div>
+      <div class="empty-state-icon">...</div>
       <p>Loading...</p>
     </div>
 
     <div v-else-if="error" class="empty-state">
-      <div class="empty-state-icon">⚠️</div>
-      <p style="color: #ef4444;">{{ error }}</p>
+      <div class="empty-state-icon">!</div>
+      <p style="color: var(--color-danger);">{{ error }}</p>
     </div>
 
     <template v-else>
@@ -20,7 +20,7 @@
           @click="activeTab = tab.key"
           class="px-4 py-2 text-sm font-medium rounded-t transition-colors border-0 cursor-pointer"
           :style="activeTab === tab.key
-            ? { background: '#2563eb', color: '#fff' }
+            ? { background: 'var(--color-primary)', color: '#fff' }
             : { background: 'transparent', color: 'var(--color-text-muted)' }"
         >{{ tab.label }}</button>
       </div>
@@ -38,7 +38,7 @@
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
                 :style="{ background: typeIconBg(t.name) }">{{ typeIcon(t.name) }}</div>
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-semibold" style="color: var(--color-text);">{{ t.label }}</div>
+                <div class="text-sm font-semibold" style="color: var(--color-text);">{{ t.label || t.name }}</div>
                 <div class="text-xs" style="color: var(--color-text-muted);">{{ t.name }}</div>
                 <div class="text-xs mt-1" style="color: var(--color-text-muted);">
                   tags: {{ typeTags[t.name]?.join(', ') || '-' }}
@@ -120,7 +120,7 @@ import TagCloud from '../components/TagCloud.vue'
 const loading = ref(true)
 const error = ref<string | null>(null)
 const activeTab = ref('type')
-const typeDistribution = ref<Array<{ name: string; count: number; label: string }>>([])
+const typeDistribution = ref<Array<{ name: string; count: number; label?: string | null }>>([])
 const typeTags = ref<Record<string, string[]>>({})
 const categoriesWithCount = ref<Array<{ name: string; count: number }>>([])
 const tags = ref<string[]>([])

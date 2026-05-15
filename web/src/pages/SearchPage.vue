@@ -196,6 +196,8 @@ async function search() {
   color: var(--color-text-muted);
   font-size: 0.86rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .results-list {
@@ -241,6 +243,8 @@ async function search() {
   font-size: 1rem;
   font-weight: 800;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .score-badge {
@@ -258,6 +262,8 @@ async function search() {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .chunk-preview {
@@ -269,6 +275,8 @@ async function search() {
   color: var(--color-text-secondary);
   font-size: 0.86rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .result-badges {

@@ -48,12 +48,12 @@
       <!-- Notes list -->
       <div class="flex-1">
         <div v-if="loading" class="empty-state">
-          <div class="empty-state-icon">⏳</div>
+          <div class="empty-state-icon">...</div>
           <p>Loading...</p>
         </div>
 
         <div v-else-if="notes.length === 0" class="empty-state">
-          <div class="empty-state-icon">📝</div>
+          <div class="empty-state-icon">NT</div>
           <p>No notes yet.</p>
           <p>
             <router-link to="/note/new" style="color: var(--color-primary);" class="hover:underline text-sm">Create your first note</router-link>
@@ -151,12 +151,12 @@ watch(() => route.query, () => {
   transition: all var(--transition-fast);
 }
 .filter-chip:hover {
-  background: #f1f5f9;
+  background: var(--color-surface-tinted);
   color: var(--color-text);
 }
 .filter-chip-active {
   background: var(--color-primary-light);
-  color: var(--color-primary);
-  font-weight: 500;
+  color: var(--color-primary-hover);
+  font-weight: 700;
 }
 </style>
