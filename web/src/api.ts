@@ -1,21 +1,55 @@
-const BASE = '/api'
+const BASE = '/api/v1'
+
+export interface ApiErrorBody {
+  code: string
+  message: string
+  details: Record<string, unknown>
+}
+
+export interface ApiEnvelope<T> {
+  data: T | null
+  meta: Record<string, unknown>
+  error: ApiErrorBody | null
+}
+
+export class ApiError extends Error {
+  code: string
+  status: number
+  details: Record<string, unknown>
+
+  constructor(status: number, error: ApiErrorBody) {
+    super(error.message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = error.code
+    this.details = error.details
+  }
+}
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + url, options)
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+  const body = await res.json() as ApiEnvelope<T>
+
+  if (!res.ok || body.error) {
+    throw new ApiError(
+      res.status,
+      body.error ?? {
+        code: `HTTP_${res.status}`,
+        message: res.statusText,
+        details: {},
+      },
+    )
   }
-  return res.json()
+
+  return body.data as T
 }
 
-export interface Note {
+export interface NoteSummary {
   file_id: string
   title: string
   description: string | null
-  content: string
   category: string | null
   tags: string[]
-  attachments: string[]
   created_at: string | null
   updated_at: string | null
   status: string
@@ -26,30 +60,91 @@ export interface Note {
   content_type: string
 }
 
+export interface NoteDetail extends NoteSummary {
+  content: string
+  attachments: string[]
+}
+
+export type Note = NoteSummary & {
+  content?: string
+  attachments?: string[]
+}
+
+export interface SearchResult {
+  note: NoteSummary
+  score: number | null
+  source: string
+  chunk_text: string | null
+}
+
+export interface CountItem {
+  name: string
+  count: number
+  label?: string | null
+}
+
+export interface Taxonomy {
+  tags: string[]
+  categories: CountItem[]
+  entry_types: CountItem[]
+  source_projects: CountItem[]
+  content_types: CountItem[]
+}
+
+export interface DashboardStats {
+  notes_count: number
+  attachments_count: number
+  type_distribution: CountItem[]
+  source_projects: CountItem[]
+  content_types: CountItem[]
+  index_health: {
+    notes_count: number
+    vectors_count: number
+    coverage: number
+  }
+}
+
 export const api = {
-  listNotes(params?: { category?: string; tag?: string; limit?: number }) {
+  listNotes(params?: {
+    category?: string
+    tag?: string
+    limit?: number
+    offset?: number
+  }) {
     const qs = new URLSearchParams()
     if (params?.category) qs.set('category', params.category)
     if (params?.tag) qs.set('tag', params.tag)
     if (params?.limit) qs.set('limit', String(params.limit))
+    if (params?.offset) qs.set('offset', String(params.offset))
     const q = qs.toString()
-    return request<Note[]>(`/notes${q ? '?' + q : ''}`)
+    return request<NoteSummary[]>(`/notes${q ? '?' + q : ''}`)
   },
 
   getNote(fileId: string) {
-    return request<Note>(`/notes/${encodeURIComponent(fileId)}`)
+    return request<NoteDetail>(`/notes/${encodeURIComponent(fileId)}`)
   },
 
-  createNote(data: { title: string; content?: string; category?: string; tags?: string[] }) {
-    return request<Note>('/notes', {
+  createNote(data: {
+    title: string
+    content?: string
+    category?: string
+    tags?: string[]
+    description?: string | null
+    entry_type?: string | null
+    source_project?: string | null
+    source_path?: string | null
+    source_context?: string | null
+    content_type?: string
+  }) {
+    return request<NoteDetail>('/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
   },
 
-  updateNote(fileId: string, data: Partial<Note>) {
-    return request<Note>(`/notes/${encodeURIComponent(fileId)}`, {
+  updateNote(fileId: string, data: Partial<NoteDetail>) {
+    return request<NoteDetail>(`/notes/${encodeURIComponent(fileId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -63,58 +158,77 @@ export const api = {
   },
 
   search(q: string, limit?: number) {
-    const qs = new URLSearchParams({ q })
+    const qs = new URLSearchParams({ q, mode: 'fulltext' })
     if (limit) qs.set('limit', String(limit))
-    return request<Note[]>(`/search?${qs}`)
+    return request<SearchResult[]>(`/search?${qs}`)
   },
 
   getTags() {
-    return request<{ tags: string[] }>('/tags')
+    return request<Taxonomy>('/taxonomy').then((taxonomy) => ({ tags: taxonomy.tags }))
   },
 
   getCategories() {
-    return request<{ categories: string[] }>('/categories')
+    return request<Taxonomy>('/taxonomy').then((taxonomy) => ({
+      categories: taxonomy.categories.map((item) => item.name),
+    }))
   },
 
   triggerIndex() {
-    return request<{ indexed: number }>('/index', { method: 'POST' })
+    return request<{ indexed: number; vectors: number }>('/index/rebuild', { method: 'POST' })
   },
 
   getRelatedNotes(fileId: string, limit?: number) {
     const qs = limit ? `?limit=${limit}` : ''
-    return request<Array<Note & { score: number }>>(`/notes/${encodeURIComponent(fileId)}/related${qs}`)
+    return request<SearchResult[]>(`/notes/${encodeURIComponent(fileId)}/related${qs}`)
   },
 
   getIndexStatus() {
-    return request<{ notes_count: number }>('/index')
+    return request<DashboardStats>('/dashboard').then((stats) => ({
+      notes_count: stats.index_health.notes_count,
+    }))
   },
 
   getAttachmentsStats() {
-    return request<{ count: number }>('/attachments/stats')
+    return request<DashboardStats>('/dashboard').then((stats) => ({
+      count: stats.attachments_count,
+    }))
   },
 
   getCategoriesWithCount() {
-    return request<{ categories: Array<{ name: string; count: number }> }>('/categories?with_count=1')
+    return request<Taxonomy>('/taxonomy').then((taxonomy) => ({
+      categories: taxonomy.categories,
+    }))
   },
 
   getTypeDistribution() {
-    return request<{ types: Array<{ name: string; count: number; label: string }> }>('/type-distribution')
+    return request<DashboardStats>('/dashboard').then((stats) => ({
+      types: stats.type_distribution,
+    }))
   },
 
   getSourceProjects() {
-    return request<{ projects: Array<{ name: string; count: number }> }>('/source-projects')
+    return request<DashboardStats>('/dashboard').then((stats) => ({
+      projects: stats.source_projects,
+    }))
   },
 
   getContentTypeStats() {
-    return request<{ content_types: Array<{ name: string; count: number }> }>('/content-type-stats')
+    return request<DashboardStats>('/dashboard').then((stats) => ({
+      content_types: stats.content_types,
+    }))
   },
 
   getIndexHealth() {
-    return request<{ notes_count: number; vectors_count: number; coverage: number }>('/index-health')
+    return request<DashboardStats>('/dashboard').then((stats) => stats.index_health)
   },
 
   chatAsk(query: string, top_k?: number) {
-    return request<{ answer: string; model: string; tokens_used: number }>('/chat/ask', {
+    return request<{
+      answer: string
+      model: string
+      tokens_used: number | null
+      sources: NoteSummary[]
+    }>('/chat/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, top_k: top_k ?? 5 }),

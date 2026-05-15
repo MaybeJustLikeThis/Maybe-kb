@@ -60,3 +60,22 @@ def note_to_response(note) -> dict:
         "source_context": note.source_context,
         "content_type": note.content_type,
     }
+
+
+def note_row_to_summary(db: Database, row) -> dict:
+    """Convert a DB row to a compact API note summary."""
+    return note_row_to_dict(db, row, include_content=False)
+
+
+def note_to_detail(note) -> dict:
+    """Convert a parsed Note object to a detailed API note shape."""
+    return note_to_response(note)
+
+
+def count_item(name: str | None, count: int, label: str | None = None) -> dict:
+    """Create a stable count item for API responses."""
+    value = name or "unknown"
+    item = {"name": value, "count": int(count)}
+    if label is not None:
+        item["label"] = label
+    return item

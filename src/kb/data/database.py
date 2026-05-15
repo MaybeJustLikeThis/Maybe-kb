@@ -209,6 +209,7 @@ class Database:
         status: str = "published",
         limit: int = 100,
         sort: str | None = None,
+        offset: int = 0,
     ) -> list[sqlite3.Row]:
         """List notes with optional filters."""
         conn = self._connect()
@@ -226,10 +227,35 @@ class Database:
             params.append(category)
 
         query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ?"
-        params.append(limit)
+        query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
         return conn.execute(query, params).fetchall()
+
+    def count_notes(
+        self,
+        category: str | None = None,
+        tag: str | None = None,
+        status: str = "published",
+    ) -> int:
+        """Count notes with the same filters as list_notes."""
+        conn = self._connect()
+        query = "SELECT COUNT(DISTINCT n.id) as cnt FROM notes n"
+        conditions = ["n.status = ?"]
+        params: list[Any] = [status]
+
+        if tag:
+            query += " JOIN note_tags t ON n.id = t.note_id"
+            conditions.append("t.tag = ?")
+            params.append(tag)
+
+        if category:
+            conditions.append("n.category = ?")
+            params.append(category)
+
+        query += " WHERE " + " AND ".join(conditions)
+        row = conn.execute(query, params).fetchone()
+        return int(row["cnt"])
 
     def search_fulltext(self, query: str, limit: int = 20) -> list[sqlite3.Row]:
         """Full-text search using FTS5."""

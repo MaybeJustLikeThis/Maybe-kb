@@ -26,17 +26,17 @@
         {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}"
       </p>
       <ul class="space-y-2">
-        <li v-for="note in results" :key="note.file_id">
+        <li v-for="result in results" :key="result.note.file_id">
           <router-link
-            :to="`/note/${encodeURIComponent(note.file_id)}`"
+            :to="`/note/${encodeURIComponent(result.note.file_id)}`"
             class="card block"
           >
-            <h3 class="font-semibold" style="color: var(--color-text);">{{ note.title }}</h3>
+            <h3 class="font-semibold" style="color: var(--color-text);">{{ result.note.title }}</h3>
             <div class="flex flex-wrap gap-1.5 mt-1.5">
-              <span v-if="note.category" class="badge badge-primary">{{ note.category }}</span>
-              <span v-for="tag in note.tags" :key="tag" class="badge badge-muted">{{ tag }}</span>
+              <span v-if="result.note.category" class="badge badge-primary">{{ result.note.category }}</span>
+              <span v-for="tag in result.note.tags" :key="tag" class="badge badge-muted">{{ tag }}</span>
             </div>
-            <p v-if="note.description" class="text-sm mt-2" style="color: var(--color-text-secondary);">{{ note.description }}</p>
+            <p v-if="result.note.description" class="text-sm mt-2" style="color: var(--color-text-secondary);">{{ result.note.description }}</p>
           </router-link>
         </li>
       </ul>
@@ -52,11 +52,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { api, type Note } from '../api'
+import { api, type SearchResult } from '../api'
 
 const query = ref('')
 const lastQuery = ref('')
-const results = ref<Note[]>([])
+const results = ref<SearchResult[]>([])
 const searching = ref(false)
 
 async function search() {

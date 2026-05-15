@@ -165,7 +165,11 @@ async function loadNote() {
       tagsInput.value = note.tags.join(', ')
       noteUpdatedAt.value = note.updated_at || note.created_at || ''
       try {
-        relatedNotes.value = await api.getRelatedNotes(props.fileId, 5)
+        const related = await api.getRelatedNotes(props.fileId, 5)
+        relatedNotes.value = related.map((result) => ({
+          ...result.note,
+          score: result.score ?? 0,
+        }))
         relatedError.value = false
       } catch {
         relatedNotes.value = []
