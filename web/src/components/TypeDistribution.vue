@@ -11,8 +11,8 @@
         :to="`/notes?entry_type=${encodeURIComponent(t.name)}`"
         class="flex items-center gap-3 text-sm no-underline group"
       >
-        <span class="w-24 text-right flex-shrink-0 text-xs" style="color: var(--color-text-muted);">{{ t.label }}</span>
-        <div class="flex-1 h-5 rounded overflow-hidden" style="background: #1e293b;">
+        <span class="w-24 text-right flex-shrink-0 text-xs" style="color: var(--color-text-muted);">{{ t.label || t.name }}</span>
+        <div class="flex-1 h-5 rounded overflow-hidden" style="background: #e8f1fb;">
           <div
             class="h-full rounded flex items-center pl-2 transition-all"
             :style="{
@@ -32,7 +32,7 @@
 import { computed } from 'vue'
 
 const props = defineProps<{
-  types: Array<{ name: string; count: number; label: string }>
+  types: Array<{ name: string; count: number; label?: string | null }>
 }>()
 
 const max = computed(() => props.types.reduce((m, t) => Math.max(m, t.count), 0))

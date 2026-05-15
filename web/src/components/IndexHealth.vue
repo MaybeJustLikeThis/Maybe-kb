@@ -17,7 +17,7 @@
         <p class="text-xs" style="color: var(--color-text-muted);">files</p>
       </div>
     </div>
-    <div class="h-1.5 rounded overflow-hidden" style="background: #1e293b;">
+    <div class="h-1.5 rounded overflow-hidden" style="background: var(--color-surface-tinted);">
       <div
         class="h-full rounded transition-all"
         :style="{ width: Math.round(coverage * 100) + '%', background: coverage > 0 ? '#10b981' : '#ef4444' }"

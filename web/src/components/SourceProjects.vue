@@ -1,5 +1,5 @@
 <template>
-  <div class="card">
+  <div class="card source-projects">
     <h3 class="section-heading">Source Projects</h3>
     <div v-if="projects.length === 0" class="empty-state">
       <p>No source projects</p>
@@ -9,10 +9,10 @@
         v-for="p in projects"
         :key="p.name"
         :to="`/notes?source_project=${encodeURIComponent(p.name)}`"
-        class="flex items-center justify-between py-2 px-1 rounded text-sm no-underline hover:bg-opacity-10 hover:bg-gray-500 transition-colors"
+        class="source-link"
       >
-        <span style="color: var(--color-text);">{{ p.name }}</span>
-        <span class="text-xs" style="color: var(--color-text-muted);">{{ p.count }} notes</span>
+        <span class="source-name">{{ p.name }}</span>
+        <span class="source-count">{{ p.count }} notes</span>
       </router-link>
     </div>
   </div>
@@ -23,3 +23,42 @@ defineProps<{
   projects: Array<{ name: string; count: number }>
 }>()
 </script>
+
+<style scoped>
+.source-projects {
+  min-height: 100%;
+}
+
+.source-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.source-link:hover {
+  background: var(--color-surface-tinted);
+  border-color: var(--color-border);
+}
+
+.source-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-count {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+</style>
