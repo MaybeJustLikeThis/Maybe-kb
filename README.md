@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**Phase 1-6 全部完成。**
+**Phase 1-7 全部完成。**
 
 | Phase | 内容 | 状态 |
 |-------|------|------|
@@ -14,15 +14,39 @@
 | Phase 4 | RAG 对话（LLM Provider + CLI/API/Web/MCP） | ✓ 完成 |
 | Phase 5 | Hexo 自动同步 + 相关笔记推荐（watchdog 监听 + 语义关联） | ✓ 完成 |
 | Phase 6 | 评测体系（数据集生成 / kb eval / 评分引擎 / 基线对比） | ✓ 完成 |
+| Phase 7 | 统一可视化管理（Dashboard 增强 + /manage 深度管理 + 多源类型系统） | ✓ 完成 |
+
+## 快速启动
+
+```powershell
+# Windows（PowerShell）
+.\scripts\start.ps1
+
+# 跳过文件监听、自动打开浏览器
+.\scripts\start.ps1 -OpenBrowser -SkipWatch
+```
+
+```bash
+# macOS / Linux
+./scripts/start.sh
+
+# 环境变量控制
+KB_SKIP_WATCH=1 KB_BACKEND_PORT=8420 ./scripts/start.sh
+```
+
+脚本自动处理：查找 Python → 检查依赖 → 清理端口 → 启动前后端 → 健康检查 → 打印地址。
+
+详细说明见 [USER_GUIDE.md](./USER_GUIDE.md) 第 4.9 节。
 
 ## 已实现功能
 
-- **笔记 CRUD**：Markdown 文件 + YAML frontmatter，兼容 Hexo 格式
+- **笔记 CRUD**：Markdown 文件 + YAML frontmatter（含 `type` 知识类型字段），兼容 Hexo 格式
+- **多源类型系统**：5 种知识类型（技术文章/踩坑记录/设计决策/代码片段/文档摘要），按类型分子目录管理，支持来源项目追踪
 - **全文搜索**：SQLite FTS5 + jieba 中文分词
 - **语义搜索**：BGE-small-zh embedding + LanceDB 向量存储
 - **混合搜索**：RRF（Reciprocal Rank Fusion）融合全文与语义结果
 - **增量索引**：SHA256 文件哈希检测变更，仅索引变化文件
-- **Web UI**：Vue 3 + Tailwind CSS，Dashboard 概览 / 笔记浏览 / Markdown 编辑（语法高亮）/ 搜索 / 附件上传
+- **Web UI**：Vue 3 + Tailwind CSS，Dashboard 总览（统计卡片+类型柱状图+索引健康度+来源项目+内容格式饼图）/ 笔记浏览 / Markdown 编辑（语法高亮）/ 搜索 / 附件上传 / Manage 深度管理（按类型/分类/标签/来源/索引五个维度）
 - **MCP Server**：7 个工具（kb_search / kb_semantic_search / kb_hybrid_search / kb_read / kb_list / kb_add / kb_rag_query）
 - **RAG 对话**：多 LLM 提供商（Ollama / OpenAI / Anthropic），一键配置切换
 - **CLI 问答**：`kb ask "问题"` 命令行 RAG 查询，支持流式输出
@@ -44,10 +68,11 @@ kb/
 ├── .gitignore
 │
 ├── notes/                      # 知识内容（Markdown，Git 管理）
-│   ├── tech/
-│   ├── projects/
-│   ├── daily/
-│   └── snippets/
+│   ├── tech-article/            # 技术文章
+│   ├── document/                # 文档摘要
+│   ├── troubleshooting/         # 踩坑记录
+│   ├── design-decision/         # 设计决策
+│   └── code-snippet/            # 代码片段
 │
 ├── attachments/                # 附件（PDF/图片，Git LFS）
 │
@@ -92,11 +117,14 @@ kb/
 │   │   └── kill-port.js        # 开发前清理端口占用
 │   └── src/
 │       ├── App.vue
+│       ├── main.ts             # 路由注册
+│       ├── api.ts              # API 客户端
 │       ├── topBar.ts           # 顶部工具栏状态管理
 │       ├── assets/
 │       │   └── base.css        # 全局基础样式 + CSS 变量
 │       ├── pages/
-│       │   ├── DashboardPage.vue
+│       │   ├── DashboardPage.vue   # 首页 Overview（统计卡片+图表+快捷操作）
+│       │   ├── ManagePage.vue      # 深度管理（5 个 Tab 维度切换）
 │       │   ├── NoteList.vue
 │       │   ├── NoteDetail.vue
 │       │   ├── SearchPage.vue
@@ -104,9 +132,14 @@ kb/
 │       └── components/
 │           ├── MarkdownEditor.vue
 │           ├── StatCard.vue
+│           ├── TypeDistribution.vue  # 类型柱状图（纯 CSS）
+│           ├── IndexHealth.vue       # 索引健康度面板
+│           ├── SourceProjects.vue    # 来源项目列表
+│           ├── ContentFormatPie.vue  # 内容格式饼图（CSS conic-gradient）
+│           ├── QuickActions.vue      # 快捷操作按钮
 │           ├── CategoryList.vue
 │           ├── TagCloud.vue
-│           └── RecentNotes.vue
+│           └── RecentNotes.vue       # 最近更新（带 type badge）
 │
 └── tests/                      # 测试
     ├── test_cli.py
@@ -163,6 +196,7 @@ kb ask "解释一下知识库中的设计模式" --stream
 
 # 启动 Web UI（自动同步 Hexo 博客）
 kb serve
+kb serve --skip-watch  # 跳过文件监听，仅启动 API
 
 # 评测搜索质量
 kb eval
@@ -201,4 +235,35 @@ host = "127.0.0.1"
 port = 8420
 # 配置 Hexo 博客源目录，kb serve 启动时自动同步
 watch_dir = "C:/Users/cherry/Desktop/项目/blog_new/blog_new/source/_posts"
+
+# 知识类型定义（Dashboard 类型分布 + 搜索过滤）
+[kb_types.tech-article]
+label = "技术文章"
+description = "技术分析、教程、原理解析"
+default_tags = []
+parser = "markdown"
+
+[kb_types.troubleshooting]
+label = "踩坑记录"
+description = "问题现象、根因、解决方案"
+default_tags = ["troubleshooting"]
+parser = "markdown"
+
+[kb_types.design-decision]
+label = "设计决策"
+description = "架构选择、取舍理由、上下文"
+default_tags = ["design"]
+parser = "markdown"
+
+[kb_types.code-snippet]
+label = "代码片段"
+description = "可复用的代码模式、脚本"
+default_tags = ["snippet"]
+parser = "markdown"
+
+[kb_types.document]
+label = "文档摘要"
+description = "PDF、论文、文档的阅读笔记，可上传文件"
+default_tags = ["document"]
+parser = "auto"
 ```

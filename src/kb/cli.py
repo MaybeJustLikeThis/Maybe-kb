@@ -234,6 +234,10 @@ def serve(
         None, "--watch",
         help="Watch a directory for .md changes and auto-reindex",
     ),
+    skip_watch: bool = typer.Option(
+        False, "--skip-watch",
+        help="Skip file watcher even if watch_dir is configured",
+    ),
 ):
     """Start the web UI server."""
     import uvicorn
@@ -247,33 +251,36 @@ def serve(
     web_app = create_app(config)
 
     observer = None
-    watch_dir_path = watch.resolve() if watch else None
-    if watch_dir_path is None and config.server.watch_dir:
-        watch_dir_path = Path(config.server.watch_dir).expanduser().resolve()
-    if watch_dir_path is not None:
-        if not watch_dir_path.is_dir():
-            console.print(f"[red]Watch directory not found: {watch_dir_path}[/red]")
-            raise typer.Exit(1)
+    if not skip_watch:
+        watch_dir_path = watch.resolve() if watch else None
+        if watch_dir_path is None and config.server.watch_dir:
+            watch_dir_path = Path(config.server.watch_dir).expanduser().resolve()
+        if watch_dir_path is not None:
+            if not watch_dir_path.is_dir():
+                console.print(
+                    f"[yellow]Warning: watch directory not found: {watch_dir_path}[/yellow]"
+                )
+                console.print("[yellow]Skipping file watcher. API server will still start.[/yellow]")
+            else:
+                from kb.core.watcher import start_watcher
 
-        from kb.core.watcher import start_watcher
+                ctx = _get_context(with_embedding=True)
+                sources = [watch_dir_path]
 
-        ctx = _get_context(with_embedding=True)
-        sources = [watch_dir_path]
+                count, vec_count = index_files(
+                    vault, ctx.db, full=False, embedding_provider=ctx.embedding,
+                    external_sources=sources,
+                )
+                console.print(f"[green]Initial index: {count} files, {vec_count} vectors[/green]")
 
-        count, vec_count = index_files(
-            vault, ctx.db, full=False, embedding_provider=ctx.embedding,
-            external_sources=sources,
-        )
-        console.print(f"[green]Initial index: {count} files, {vec_count} vectors[/green]")
+                def on_change():
+                    index_files(
+                        vault, ctx.db, full=False, embedding_provider=ctx.embedding,
+                        external_sources=sources,
+                    )
 
-        def on_change():
-            index_files(
-                vault, ctx.db, full=False, embedding_provider=ctx.embedding,
-                external_sources=sources,
-            )
-
-        observer = start_watcher(watch_dir_path, on_change, debounce_ms=200)
-        console.print(f"[green]Watching {watch_dir_path} for .md changes[/green]")
+                observer = start_watcher(watch_dir_path, on_change, debounce_ms=200)
+                console.print(f"[green]Watching {watch_dir_path} for .md changes[/green]")
 
     console.print(f"[green]Starting kb server at http://{host}:{port}[/green]")
 
