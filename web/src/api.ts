@@ -104,6 +104,17 @@ export interface DashboardStats {
   }
 }
 
+export interface DashboardActivityItem {
+  kind: string
+  title: string
+  description: string
+  timestamp: string | null
+  note: {
+    file_id: string
+    title: string
+  }
+}
+
 export const api = {
   listNotes(params?: {
     category?: string
@@ -220,6 +231,13 @@ export const api = {
 
   getIndexHealth() {
     return request<DashboardStats>('/dashboard').then((stats) => stats.index_health)
+  },
+
+  getDashboardActivity(params?: { limit?: number }) {
+    const qs = new URLSearchParams()
+    if (params?.limit) qs.set('limit', String(params.limit))
+    const q = qs.toString()
+    return request<DashboardActivityItem[]>(`/dashboard/activity${q ? '?' + q : ''}`)
   },
 
   chatAsk(query: string, top_k?: number) {
