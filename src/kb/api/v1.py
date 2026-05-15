@@ -135,6 +135,10 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     def get_dashboard():
         return responses.ok(queries.get_dashboard_stats(ctx))
 
+    @router.get("/dashboard/activity")
+    def get_dashboard_activity(limit: int = Query(8, ge=1, le=20)):
+        return responses.ok(queries.get_dashboard_activity(ctx, limit))
+
     @router.post("/index/rebuild")
     def rebuild_index():
         try:

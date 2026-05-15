@@ -194,6 +194,47 @@ def test_v1_dashboard_returns_summary(client: TestClient) -> None:
     assert data["type_distribution"][0]["name"] == "document"
 
 
+def test_v1_dashboard_activity_returns_empty_envelope(client: TestClient) -> None:
+    """Dashboard activity returns an empty list for an empty knowledge base."""
+    response = client.get("/api/v1/dashboard/activity")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    assert body["data"] == []
+
+
+def test_v1_dashboard_activity_returns_recent_notes(client: TestClient) -> None:
+    """Dashboard activity is derived from recent note metadata."""
+    first = client.post("/api/v1/notes", json={
+        "title": "First Activity Note",
+        "content": "First body",
+        "category": "ops",
+        "tags": ["alpha"],
+        "source_project": "kb",
+    }).json()["data"]
+    second = client.post("/api/v1/notes", json={
+        "title": "Second Activity Note",
+        "content": "Second body",
+        "category": "ops",
+        "tags": ["beta"],
+        "source_project": "kb",
+    }).json()["data"]
+
+    response = client.get("/api/v1/dashboard/activity", params={"limit": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    assert len(body["data"]) == 1
+    item = body["data"][0]
+    assert item["kind"] == "note_updated"
+    assert item["title"] in {first["title"], second["title"]}
+    assert item["description"]
+    assert item["timestamp"]
+    assert set(item["note"]) == {"file_id", "title"}
+
+
 def test_v1_index_rebuild_returns_envelope(client: TestClient) -> None:
     """Index rebuild returns command result in the v1 envelope."""
     client.post("/api/v1/notes", json={"title": "Index Me", "content": "hello"})

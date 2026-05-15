@@ -111,6 +111,34 @@ def get_dashboard_stats(ctx: AppContext) -> dict:
     }
 
 
+def get_dashboard_activity(ctx: AppContext, limit: int) -> list[dict]:
+    """Return lightweight activity items derived from recent notes."""
+    rows = ctx.db.list_notes(limit=limit, offset=0)
+    items: list[dict] = []
+    for row in rows:
+        note = note_row_to_summary(ctx.db, row)
+        timestamp = note.get("updated_at") or note.get("created_at")
+        description_parts = []
+        if note.get("source_project"):
+            description_parts.append(f"Source: {note['source_project']}")
+        if note.get("category"):
+            description_parts.append(f"Category: {note['category']}")
+        if note.get("entry_type"):
+            description_parts.append(f"Type: {note['entry_type']}")
+        description = " / ".join(description_parts) or "Knowledge note updated"
+        items.append({
+            "kind": "note_updated",
+            "title": note["title"],
+            "description": description,
+            "timestamp": timestamp,
+            "note": {
+                "file_id": note["file_id"],
+                "title": note["title"],
+            },
+        })
+    return items
+
+
 def get_taxonomy(ctx: AppContext) -> dict:
     """Return tags and grouped taxonomy counts."""
     categories = [
