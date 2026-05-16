@@ -108,10 +108,21 @@ async function load() {
   }
 }
 
+function extractFilters(ns: Note[]) {
+  const catSet = new Set<string>()
+  const tagSet = new Set<string>()
+  for (const n of ns) {
+    if (n.category) catSet.add(n.category)
+    for (const t of n.tags) tagSet.add(t)
+  }
+  categories.value = [...catSet].sort()
+  tags.value = [...tagSet].sort()
+}
+
 onMounted(async () => {
-  const [cats, tgs] = await Promise.all([api.getCategories(), api.getTags()])
-  categories.value = cats.categories
-  tags.value = tgs.tags
+  // Load all notes for this source to derive its categories and tags
+  const all = await api.listNotes({ source_project: props.name, limit: 200 })
+  extractFilters(all)
   load()
 })
 
