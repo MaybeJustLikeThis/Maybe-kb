@@ -12,10 +12,25 @@
           :key="item.to"
           :to="item.to"
           class="nav-item"
-          :class="route.path === item.to ? 'nav-active' : ''"
+          :class="isNavActive(item.to) ? 'nav-active' : ''"
         >
           <span class="nav-token">{{ item.icon }}</span>
           <span>{{ item.label }}</span>
+        </router-link>
+      </nav>
+
+      <hr class="nav-divider" />
+
+      <nav class="nav-list">
+        <router-link
+          v-for="src in sourceTabs"
+          :key="src.to"
+          :to="src.to"
+          class="nav-item"
+          :class="isSourceActive(src.to) ? 'nav-active' : ''"
+        >
+          <span class="nav-token">{{ src.icon }}</span>
+          <span>{{ src.label }}</span>
         </router-link>
       </nav>
 
@@ -47,19 +62,47 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTopBar } from './topBar'
+import { api, type SourceItem } from './api'
 
 const route = useRoute()
 const tb = useTopBar()
 
 const navItems = [
   { to: '/', label: 'Overview', icon: 'OV' },
-  { to: '/notes', label: 'Notes', icon: 'NT' },
-  { to: '/manage', label: 'Manage', icon: 'MG' },
   { to: '/search', label: 'Search', icon: 'SR' },
   { to: '/chat', label: 'Chat', icon: 'AI' },
+  { to: '/manage', label: 'Manage', icon: 'MG' },
 ]
+
+const sourceTabs = ref<Array<{ to: string; label: string; icon: string }>>([])
+
+function isNavActive(to: string) {
+  return route.path === to
+}
+
+function isSourceActive(to: string) {
+  return route.path.startsWith(to)
+}
+
+onMounted(async () => {
+  try {
+    const sources = await api.getSources()
+    sourceTabs.value = sources.map((s: SourceItem) => ({
+      to: `/source/${s.name}`,
+      label: s.label,
+      icon: s.icon,
+    }))
+  } catch {
+    sourceTabs.value = [
+      { to: '/source/blog', label: '博客', icon: 'BK' },
+      { to: '/source/agent', label: 'Agent 沉淀', icon: 'AG' },
+      { to: '/source/manual', label: '手动录入', icon: 'MN' },
+    ]
+  }
+})
 </script>
 
 <style scoped>
@@ -102,6 +145,13 @@ const navItems = [
 .nav-list {
   flex: 1;
   padding: 0 12px;
+}
+
+.nav-divider {
+  margin: 8px 20px;
+  border: none;
+  border-top: 1px solid var(--color-sidebar-border);
+  opacity: 0.4;
 }
 
 .nav-item {

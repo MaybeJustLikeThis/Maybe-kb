@@ -86,7 +86,7 @@ import { api } from '../api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { setTopBar } from '../topBar'
 
-const props = defineProps<{ fileId?: string }>()
+const props = defineProps<{ name?: string; fileId?: string }>()
 const router = useRouter()
 
 const isNew = computed(() => !props.fileId || props.fileId === 'new')
@@ -121,9 +121,10 @@ const renderedContent = computed(() => {
 })
 
 function syncTopBar() {
+  const backTo = props.name ? `/source/${props.name}` : '/'
   if (isNew.value) {
     setTopBar({
-      backTo: '/',
+      backTo,
       title: 'New Note',
       actions: [
         { label: 'Cancel', onClick: cancelEdit, btnClass: 'btn btn-ghost' },
@@ -132,7 +133,7 @@ function syncTopBar() {
     })
   } else if (isEditing.value) {
     setTopBar({
-      backTo: '/',
+      backTo,
       title: title.value || 'Untitled',
       actions: [
         { label: 'Cancel', onClick: cancelEdit, btnClass: 'btn btn-ghost' },
@@ -218,7 +219,11 @@ async function save() {
       category: category.value || undefined,
       tags: tagList,
     })
-    router.push(`/note/${encodeURIComponent(note.file_id)}`)
+    if (props.name) {
+      router.push(`/source/${props.name}/${encodeURIComponent(note.file_id)}`)
+    } else {
+      router.push(`/note/${encodeURIComponent(note.file_id)}`)
+    }
   } else if (props.fileId) {
     await api.updateNote(props.fileId, {
       title: title.value,

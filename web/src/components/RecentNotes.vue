@@ -12,9 +12,6 @@
           class="recent-link"
         >
           <div class="flex items-center gap-3 min-w-0">
-            <span v-if="note.entry_type" class="text-xs px-1.5 py-0.5 rounded flex-shrink-0" :style="typeBadgeStyle(note.entry_type)">
-              {{ note.entry_type }}
-            </span>
             <span class="truncate font-medium" style="color: var(--color-text);">{{ note.title }}</span>
           </div>
           <span class="text-xs flex-shrink-0 ml-3" style="color: var(--color-text-muted);">
@@ -32,19 +29,6 @@ import { type Note } from '../api'
 defineProps<{
   notes: Note[]
 }>()
-
-const typeColors: Record<string, { bg: string; text: string }> = {
-  'tech-article': { bg: 'rgba(59,130,246,0.15)', text: '#3b82f6' },
-  'document': { bg: 'rgba(16,185,129,0.15)', text: '#10b981' },
-  'troubleshooting': { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b' },
-  'design-decision': { bg: 'rgba(236,72,153,0.15)', text: '#ec4899' },
-  'code-snippet': { bg: 'rgba(139,92,246,0.15)', text: '#8b5cf6' },
-}
-
-function typeBadgeStyle(entryType: string) {
-  const c = typeColors[entryType] || { bg: 'rgba(8,145,178,0.12)', text: 'var(--color-primary-hover)' }
-  return { background: c.bg, color: c.text }
-}
 
 function formatTime(ts: string | null): string {
   if (!ts) return ''

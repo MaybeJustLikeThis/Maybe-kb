@@ -4,17 +4,17 @@ import App from './App.vue'
 import './style.css'
 import './assets/base.css'
 
-import NoteList from './pages/NoteList.vue'
+import OverviewPage from './pages/OverviewPage.vue'
+import SourcePage from './pages/SourcePage.vue'
 import NoteDetail from './pages/NoteDetail.vue'
 import SearchPage from './pages/SearchPage.vue'
 import ChatPage from './pages/ChatPage.vue'
-import DashboardPage from './pages/DashboardPage.vue'
 import ManagePage from './pages/ManagePage.vue'
 
 const routes = [
-  { path: '/', component: DashboardPage },
-  { path: '/notes', component: NoteList },
-  { path: '/note/:fileId', component: NoteDetail, props: true },
+  { path: '/', component: OverviewPage },
+  { path: '/source/:name', component: SourcePage, props: true },
+  { path: '/source/:name/:fileId', component: NoteDetail, props: true },
   { path: '/manage', component: ManagePage },
   { path: '/search', component: SearchPage },
   { path: '/chat', component: ChatPage },

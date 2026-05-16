@@ -1,8 +1,7 @@
 <template>
   <div>
-    <!-- Header -->
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold" style="color: var(--color-text);">Notes</h2>
+      <h2 class="text-2xl font-bold" style="color: var(--color-text);">{{ sourceLabel }}</h2>
       <router-link
         to="/note/new"
         class="btn btn-primary"
@@ -10,9 +9,7 @@
     </div>
 
     <div class="flex gap-8">
-      <!-- Filters sidebar -->
       <div class="w-52 flex-shrink-0">
-        <!-- Categories -->
         <div class="mb-6">
           <h3 class="section-heading">Categories</h3>
           <div class="space-y-0.5">
@@ -28,7 +25,6 @@
           </div>
         </div>
 
-        <!-- Tags -->
         <div>
           <h3 class="section-heading">Tags</h3>
           <div class="space-y-0.5">
@@ -45,7 +41,6 @@
         </div>
       </div>
 
-      <!-- Notes list -->
       <div class="flex-1">
         <div v-if="loading" class="empty-state">
           <div class="empty-state-icon">...</div>
@@ -54,16 +49,13 @@
 
         <div v-else-if="notes.length === 0" class="empty-state">
           <div class="empty-state-icon">NT</div>
-          <p>No notes yet.</p>
-          <p>
-            <router-link to="/note/new" style="color: var(--color-primary);" class="hover:underline text-sm">Create your first note</router-link>
-          </p>
+          <p>No notes in this source yet.</p>
         </div>
 
         <ul v-else class="space-y-2">
           <li v-for="note in notes" :key="note.file_id">
             <router-link
-              :to="`/note/${encodeURIComponent(note.file_id)}`"
+              :to="`/source/${props.name}/${encodeURIComponent(note.file_id)}`"
               class="card block"
             >
               <div class="flex items-start justify-between gap-4">
@@ -86,34 +78,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, watch, onMounted, computed } from 'vue'
 import { api, type Note } from '../api'
 
-const route = useRoute()
+const props = defineProps<{ name: string }>()
+
 const notes = ref<Note[]>([])
 const categories = ref<string[]>([])
 const tags = ref<string[]>([])
 const selectedCategory = ref('')
 const selectedTag = ref('')
 const loading = ref(false)
-let syncingFromRoute = false
 
-function queryValue(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function syncFiltersFromRoute() {
-  syncingFromRoute = true
-  selectedCategory.value = queryValue(route.query.category)
-  selectedTag.value = queryValue(route.query.tag)
-  syncingFromRoute = false
-}
+const sourceLabel = computed(() => props.name.charAt(0).toUpperCase() + props.name.slice(1))
 
 async function load() {
   loading.value = true
   try {
-    const params: { category?: string; tag?: string } = {}
+    const params: { source_project: string; category?: string; tag?: string } = {
+      source_project: props.name,
+    }
     if (selectedCategory.value) params.category = selectedCategory.value
     if (selectedTag.value) params.tag = selectedTag.value
     notes.value = await api.listNotes(params)
@@ -123,20 +107,13 @@ async function load() {
 }
 
 onMounted(async () => {
-  syncFiltersFromRoute()
   const [cats, tgs] = await Promise.all([api.getCategories(), api.getTags()])
   categories.value = cats.categories
   tags.value = tgs.tags
   load()
 })
 
-watch([selectedCategory, selectedTag], () => {
-  if (!syncingFromRoute) load()
-})
-watch(() => route.query, () => {
-  syncFiltersFromRoute()
-  load()
-})
+watch([selectedCategory, selectedTag], () => load())
 </script>
 
 <style scoped>

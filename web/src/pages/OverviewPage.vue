@@ -31,9 +31,7 @@
       </div>
 
       <div class="overview-grid">
-        <div class="type-panel">
-          <TypeDistribution :types="typeDistribution" />
-        </div>
+        <SourceProjects :projects="sourceProjects" />
         <IndexHealth
           :notes-count="indexHealth.notes_count"
           :vectors-count="indexHealth.vectors_count"
@@ -58,7 +56,6 @@
 import { ref, onMounted } from 'vue'
 import { api, type DashboardActivityItem, type Note } from '../api'
 import StatCard from '../components/StatCard.vue'
-import TypeDistribution from '../components/TypeDistribution.vue'
 import IndexHealth from '../components/IndexHealth.vue'
 import SourceProjects from '../components/SourceProjects.vue'
 import ContentFormatPie from '../components/ContentFormatPie.vue'
@@ -69,8 +66,7 @@ import DashboardActivity from '../components/DashboardActivity.vue'
 const loading = ref(true)
 const error = ref<string | null>(null)
 const stats = ref({ notesCount: 0, typesCount: 0, categoriesCount: 0, tagsCount: 0, attachmentsCount: 0 })
-const typeDistribution = ref<Array<{ name: string; count: number; label?: string | null }>>([])
-const sourceProjects = ref<Array<{ name: string; count: number }>>([])
+const sourceProjects = ref<Array<{ name: string; count: number; label?: string | null }>>([])
 const contentTypes = ref<Array<{ name: string; count: number }>>([])
 const indexHealth = ref({ notes_count: 0, vectors_count: 0, coverage: 0 })
 const recentNotes = ref<Note[]>([])
@@ -81,26 +77,24 @@ onMounted(async () => {
   try {
     const [
       indexData, attData, catData, tagData, notesData,
-      typeData, srcData, ctData, healthData,
+      srcData, ctData, healthData,
     ] = await Promise.all([
       api.getIndexStatus(),
       api.getAttachmentsStats(),
       api.getCategoriesWithCount(),
       api.getTags(),
       api.listNotes({ limit: 8 }),
-      api.getTypeDistribution(),
       api.getSourceProjects(),
       api.getContentTypeStats(),
       api.getIndexHealth(),
     ])
     stats.value = {
       notesCount: indexData.notes_count,
-      typesCount: typeData.types.length,
+      typesCount: srcData.projects.length,
       categoriesCount: catData.categories.length,
       tagsCount: tagData.tags.length,
       attachmentsCount: attData.count,
     }
-    typeDistribution.value = typeData.types
     sourceProjects.value = srcData.projects
     contentTypes.value = ctData.content_types
     indexHealth.value = healthData
