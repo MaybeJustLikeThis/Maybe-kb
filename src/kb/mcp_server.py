@@ -115,6 +115,7 @@ def create_mcp_server(config: KBConfig):
         content: str,
         source_project: str,
         tags: str = "",
+        description: str = "",
         source_context: str = "",
         category: str = "",
     ) -> dict:
@@ -126,14 +127,19 @@ def create_mcp_server(config: KBConfig):
         explains the core idea up front, provides context (why it matters),
         and ends with actionable takeaways or open questions.
 
-        Examples of what to save: technical analysis, troubleshooting logs,
-        design decisions, code patterns, document summaries, research notes.
+        Use description to summarize longer notes (articles, postmortems,
+        design docs) for better search recall. Skip it for short notes and
+        code snippets where the title is already enough.
+
+        Examples: technical analysis, troubleshooting logs, design decisions,
+        code patterns, document summaries, research notes.
         """
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         try:
             note = services.create_note(
                 vault, db, title, content,
                 category=category or None,
+                description=description or None,
                 source_project=source_project or None,
                 source_context=source_context or None,
                 tags=tag_list,
