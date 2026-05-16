@@ -142,7 +142,7 @@ function syncTopBar() {
     })
   } else {
     setTopBar({
-      backTo: '/',
+      backTo,
       title: title.value,
       actions: [
         { label: 'Edit', onClick: startEdit, btnClass: 'btn btn-outline' },

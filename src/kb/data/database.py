@@ -230,7 +230,7 @@ class Database:
             params.append(source_project)
 
         query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY COALESCE(n.updated_at, n.created_at) DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         return conn.execute(query, params).fetchall()
