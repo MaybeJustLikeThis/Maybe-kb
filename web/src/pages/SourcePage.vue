@@ -115,8 +115,6 @@ function extractFilters(ns: Note[]) {
 
 async function load() {
   loading.value = true
-  selectedCategory.value = (route.query.category as string) || ''
-  selectedTag.value = (route.query.tag as string) || ''
   try {
     const params: { source_project: string; category?: string; tag?: string } = {
       source_project: props.name,
@@ -125,7 +123,6 @@ async function load() {
     if (selectedTag.value) params.tag = selectedTag.value
     const result = await api.listNotes(params)
     notes.value = result
-    // Derive filters from unfiltered source notes
     if (!selectedCategory.value && !selectedTag.value) {
       extractFilters(result)
     }
@@ -134,8 +131,17 @@ async function load() {
   }
 }
 
-// Load on mount AND when source name changes
-watch(() => props.name, () => load(), { immediate: true })
+// When source changes, reset filters and reload
+watch(() => props.name, () => {
+  selectedCategory.value = ''
+  selectedTag.value = ''
+  load()
+})
+
+// On mount, read query params and load
+selectedCategory.value = (route.query.category as string) || ''
+selectedTag.value = (route.query.tag as string) || ''
+load()
 
 watch([selectedCategory, selectedTag], () => load())
 </script>
