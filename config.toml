@@ -20,13 +20,19 @@ watch_dir = "C:/Users/cherry/Desktop/项目/blog_new/blog_new/source/_posts"
 label = "博客"
 description = "Hexo 博客文章"
 icon = "BK"
+default_category = "未分类"
+auto_tags = []
 
 [sources.agent]
 label = "Agent 沉淀"
 description = "Agent 自动沉淀的知识"
 icon = "AG"
+default_category = "未分类"
+auto_tags = ["auto-generated"]
 
 [sources.manual]
 label = "手动录入"
 description = "手动创建的知识笔记"
 icon = "MN"
+default_category = "未分类"
+auto_tags = []

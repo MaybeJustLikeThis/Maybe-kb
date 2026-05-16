@@ -10,8 +10,7 @@ runner = CliRunner()
 @pytest.fixture
 def kb_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a kb project directory and cd into it."""
-    import os
-    os.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path)
     return tmp_path
 
 
@@ -280,3 +279,35 @@ def test_kb_init_in_existing(kb_dir: Path):
     result = runner.invoke(app, ["init"])
     assert result.exit_code == 0
     assert (kb_dir / "config.toml").exists()
+
+
+def test_kb_add_with_source_project(kb_dir: Path):
+    """kb add --source-project creates note with correct source."""
+    result = runner.invoke(app, ["init"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, [
+        "add", "CLI Test",
+        "--source-project", "manual",
+        "--category", "test",
+        "--tags", "cli,test",
+        "--description", "CLI test note",
+        "--source-context", "testing ingest",
+    ])
+    assert result.exit_code == 0
+    assert "Created note:" in result.stdout
+    note = next((kb_dir / "notes").rglob("*.md"))
+    content = note.read_text(encoding="utf-8")
+    assert "source_project: manual" in content
+    assert "source_context: testing ingest" in content
+
+
+def test_kb_add_rejects_empty_title(kb_dir: Path):
+    """kb add rejects empty title via ingest validation."""
+    result = runner.invoke(app, ["init"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, ["add", ""])
+    assert result.exit_code != 0
+    assert "title" in result.stdout.lower()
+    assert not list((kb_dir / "notes").rglob("*.md"))

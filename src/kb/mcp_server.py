@@ -27,6 +27,10 @@ def create_mcp_server(config: KBConfig):
     llm = ctx.llm
     store = ctx.vector_store
 
+    def _blank_to_none(value: str) -> str | None:
+        stripped = value.strip()
+        return stripped or None
+
     @mcp.tool()
     def kb_search(query: str, limit: int = 20) -> list[dict]:
         """Full-text search using FTS5 + jieba Chinese tokenization."""
@@ -91,22 +95,46 @@ def create_mcp_server(config: KBConfig):
         return [note_row_to_dict(db, dict(row)) for row in rows]
 
     @mcp.tool()
-    def kb_add(title: str, content: str, category: str = "",
-               tags: str = "", description: str = "") -> dict:
+    def kb_add(
+        title: str,
+        content: str,
+        category: str = "",
+        tags: str = "",
+        description: str = "",
+        source_project: str = "manual",
+        source_context: str = "",
+    ) -> dict:
         """Create a new note. tags is comma-separated."""
+        from kb.core.models import IngestRequest
+        from kb.core.ingest import ingest
+
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-        cat = category if category else None
+        cat = _blank_to_none(category)
+        desc = _blank_to_none(description)
+        sctx = _blank_to_none(source_context)
+        src_cfg = config.sources.get(source_project)
         try:
-            note = services.create_note(
-                vault, db, title, content,
-                category=cat, tags=tag_list, description=description or None,
+            note = ingest(
+                IngestRequest(
+                    title=title,
+                    content=content,
+                    source_project=source_project,
+                    tags=tag_list,
+                    category=cat,
+                    description=desc,
+                    source_context=sctx,
+                ),
+                vault, db,
+                source_config=src_cfg,
             )
-        except ValueError:
-            return {"error": "Path traversal blocked"}
+        except ValueError as e:
+            return {"error": str(e)}
         return {
             "file_id": note.file_id,
             "title": note.title,
             "content": note.content,
+            "source_project": note.source_project,
+            "tags": note.tags,
         }
 
     @mcp.tool()
@@ -136,19 +164,30 @@ def create_mcp_server(config: KBConfig):
         Type-TechArticle, Type-Document. Combine with topic tags freely
         (e.g. tags: "Type-Troubleshooting, Python, memory-leak").
         """
-<｜｜DSML｜｜parameter name="new_string" string="true">
+        from kb.core.models import IngestRequest
+        from kb.core.ingest import ingest
+
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        cat = _blank_to_none(category)
+        desc = _blank_to_none(description)
+        sctx = _blank_to_none(source_context)
+        src_cfg = config.sources.get(source_project)
         try:
-            note = services.create_note(
-                vault, db, title, content,
-                category=category or None,
-                description=description or None,
-                source_project=source_project or None,
-                source_context=source_context or None,
-                tags=tag_list,
+            note = ingest(
+                IngestRequest(
+                    title=title,
+                    content=content,
+                    source_project=source_project,
+                    tags=tag_list,
+                    category=cat,
+                    description=desc,
+                    source_context=sctx,
+                ),
+                vault, db,
+                source_config=src_cfg,
             )
-        except ValueError:
-            return {"error": "Path traversal blocked"}
+        except ValueError as e:
+            return {"error": str(e)}
         return {
             "file_id": note.file_id,
             "title": note.title,

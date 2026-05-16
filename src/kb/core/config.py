@@ -37,6 +37,8 @@ class SourceConfig:
     label: str
     description: str = ""
     icon: str = ""
+    default_category: str | None = None
+    auto_tags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,8 @@ def load_config(base_path: Path) -> KBConfig:
             label=raw.get("label", source_name),
             description=raw.get("description", ""),
             icon=raw.get("icon", ""),
+            default_category=raw.get("default_category"),
+            auto_tags=raw.get("auto_tags", []),
         )
 
     vault_rel = general.get("vault_path", ".")

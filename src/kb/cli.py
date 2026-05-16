@@ -85,20 +85,45 @@ def add_note(
     tags: str = typer.Option("", help="Comma-separated tags"),
     category: str = typer.Option("", help="Note category"),
     description: str = typer.Option("", help="Short description"),
+    source_project: str = typer.Option(
+        "manual", "--source-project", "-s",
+        help="Source project (blog, agent, manual)",
+    ),
+    source_context: str = typer.Option(
+        "", "--source-context", "-c",
+        help="Source context (e.g., original URL, purpose)",
+    ),
 ):
     """Create a new note."""
+    from kb.core.ingest import ingest
+    from kb.core.models import IngestRequest
+
     vault = Path.cwd()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-    cat = category if category else None
+    cat = category.strip() or None
+    desc = description.strip() or None
+    sctx = source_context.strip() or None
+    config = load_config(vault)
+    src_cfg = config.sources.get(source_project)
 
     ctx = _get_context()
     try:
-        note = services.create_note(
-            vault, ctx.db, title, f"# {title}\n\n",
-            cat, tag_list, description or None,
+        note = ingest(
+            IngestRequest(
+                title=title,
+                content=f"# {title}\n\n",
+                source_project=source_project,
+                tags=tag_list,
+                category=cat,
+                description=desc,
+                source_context=sctx,
+            ),
+            vault,
+            ctx.db,
+            source_config=src_cfg,
         )
-    except ValueError:
-        console.print("[red]Path traversal blocked in note path[/red]")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
     finally:
         ctx.close()
@@ -269,14 +294,14 @@ def serve(
 
                 count, vec_count = index_files(
                     vault, ctx.db, full=False, embedding_provider=ctx.embedding,
-                    external_sources=sources,
+                    external_sources=sources, source_project="blog",
                 )
                 console.print(f"[green]Initial index: {count} files, {vec_count} vectors[/green]")
 
                 def on_change():
                     index_files(
                         vault, ctx.db, full=False, embedding_provider=ctx.embedding,
-                        external_sources=sources,
+                        external_sources=sources, source_project="blog",
                     )
 
                 observer = start_watcher(watch_dir_path, on_change, debounce_ms=200)

@@ -54,19 +54,21 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
 
     @router.post("/notes")
     def create_note(body: NoteCreateRequest):
+        from kb.core.models import IngestRequest
+        from kb.core.ingest import ingest
+
         try:
-            note = services.create_note(
-                ctx.vault,
-                ctx.db,
-                body.title,
-                body.content,
-                body.category,
-                body.tags,
-                body.description,
-                source_project=body.source_project,
-                source_path=body.source_path,
-                source_context=body.source_context,
-                content_type=body.content_type,
+            note = ingest(
+                IngestRequest(
+                    title=body.title,
+                    content=body.content,
+                    source_project=body.source_project or "manual",
+                    tags=body.tags,
+                    category=body.category,
+                    description=body.description,
+                    source_context=body.source_context,
+                ),
+                ctx.vault, ctx.db,
             )
         except ValueError:
             return responses.path_traversal_blocked()

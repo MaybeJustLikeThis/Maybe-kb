@@ -116,3 +116,21 @@ class Note:
             source_context=source_context,
             content_type=content_type,
         )
+
+
+@dataclass(frozen=True)
+class IngestRequest:
+    """Unified input for the note ingest pipeline.
+
+    All entry points (CLI, MCP, API, indexer) assemble this and pass it
+    to ingest(). source_project determines which SourceConfig is used for
+    default values.
+    """
+
+    title: str
+    content: str
+    source_project: str
+    tags: list[str] = field(default_factory=list)
+    category: str | None = None
+    description: str | None = None
+    source_context: str | None = None

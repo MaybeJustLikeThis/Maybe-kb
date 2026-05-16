@@ -120,3 +120,70 @@ def test_kb_save_tool_registered(tmp_path: Path):
     mcp = create_mcp_server(config)
     tool_names = {t.name for t in mcp._tool_manager._tools.values()}
     assert "kb_save" in tool_names
+
+
+def test_kb_add_has_source_project(tmp_path: Path):
+    """kb_add accepts and stores source_project."""
+    os.chdir(tmp_path)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / ".kb").mkdir()
+
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        embedding=EmbeddingConfig(provider="local"),
+        llm=LLMConfig(provider="ollama"),
+        search=SearchConfig(),
+        rag=RAGConfig(),
+        server=ServerConfig(),
+    )
+    from kb.mcp_server import create_mcp_server
+    mcp = create_mcp_server(config)
+
+    async def _run():
+        result = await mcp.call_tool("kb_add", {
+            "title": "MCP Add Test",
+            "content": "# Test\n\nContent",
+            "source_project": "agent",
+            "source_context": "testing kb_add",
+            "tags": "test, mcp",
+            "category": "test",
+        })
+        assert result is not None
+        content_list = result[0] if isinstance(result, tuple) else result
+        data = content_list[0].text if hasattr(content_list[0], "text") else str(content_list[0])
+        assert "file_id" in data
+        assert "source_project" in data
+        assert "agent" in data
+
+    anyio.run(_run)
+
+
+def test_kb_add_rejects_empty_title(tmp_path: Path):
+    """kb_add returns error dict for empty title."""
+    os.chdir(tmp_path)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / ".kb").mkdir()
+
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        embedding=EmbeddingConfig(provider="local"),
+        llm=LLMConfig(provider="ollama"),
+        search=SearchConfig(),
+        rag=RAGConfig(),
+        server=ServerConfig(),
+    )
+    from kb.mcp_server import create_mcp_server
+    mcp = create_mcp_server(config)
+
+    async def _run():
+        result = await mcp.call_tool("kb_add", {
+            "title": "",
+            "content": "x",
+        })
+        assert result is not None
+        content_list = result[0] if isinstance(result, tuple) else result
+        data = content_list[0].text if hasattr(content_list[0], "text") else str(content_list[0])
+        assert "error" in data
+        assert "title" in data
+
+    anyio.run(_run)

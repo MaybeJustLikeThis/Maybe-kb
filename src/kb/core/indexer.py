@@ -19,11 +19,13 @@ def index_files(
     full: bool = False,
     embedding_provider: EmbeddingProvider | None = None,
     external_sources: list[Path] | None = None,
+    source_project: str | None = None,
 ) -> tuple[int, int]:
     """Index notes into database. Returns (fts5_count, vector_count).
 
     If external_sources is provided, .md files from those directories are
     synced into vault/notes/ before indexing (new files only, no overwrite).
+    source_project is injected into synced files that lack it.
     """
     if external_sources:
         notes_dir = vault / "notes"
@@ -46,6 +48,13 @@ def index_files(
                     if existing.resolve() != dest.resolve():
                         existing.unlink()
                 src_content = f.read_text(encoding="utf-8")
+                # Inject source_project into frontmatter if missing
+                if source_project and "source_project:" not in src_content:
+                    first_delim = src_content.find("---", 0)
+                    second_delim = src_content.find("---", first_delim + 3) if first_delim != -1 else -1
+                    if second_delim != -1:
+                        fm = src_content[first_delim+3:second_delim].rstrip()
+                        src_content = src_content[:first_delim+3] + "\n" + fm + f"\nsource_project: {source_project}\n" + src_content[second_delim:]
                 if not dest.exists() or dest.read_text(encoding="utf-8") != src_content:
                     dest.write_text(src_content, encoding="utf-8")
 
