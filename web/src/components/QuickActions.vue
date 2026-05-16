@@ -3,7 +3,7 @@
     <h3 class="section-heading">Quick Actions</h3>
     <div class="action-grid">
       <button class="btn btn-primary text-sm" @click="$emit('reindex')">Rebuild Index</button>
-      <router-link to="/notes" class="btn btn-outline text-sm no-underline">Browse Notes</router-link>
+      <router-link to="/source/blog" class="btn btn-outline text-sm no-underline">Browse Notes</router-link>
     </div>
   </div>
 </template>

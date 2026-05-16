@@ -8,7 +8,7 @@
       <router-link
         v-for="p in projects"
         :key="p.name"
-        :to="`/notes?source_project=${encodeURIComponent(p.name)}`"
+        :to="`/source/${encodeURIComponent(p.name)}`"
         class="source-link"
       >
         <span class="source-name">{{ p.name }}</span>

@@ -79,15 +79,17 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { api, type Note } from '../api'
 
 const props = defineProps<{ name: string }>()
+const route = useRoute()
 
 const notes = ref<Note[]>([])
 const categories = ref<string[]>([])
 const tags = ref<string[]>([])
-const selectedCategory = ref('')
-const selectedTag = ref('')
+const selectedCategory = ref((route.query.category as string) || '')
+const selectedTag = ref((route.query.tag as string) || '')
 const loading = ref(false)
 
 const sourceLabel = computed(() => props.name.charAt(0).toUpperCase() + props.name.slice(1))

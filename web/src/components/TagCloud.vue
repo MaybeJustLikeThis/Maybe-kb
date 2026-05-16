@@ -8,7 +8,7 @@
       <router-link
         v-for="tag in tags"
         :key="tag"
-        :to="`/notes?tag=${encodeURIComponent(tag)}`"
+        :to="`/source/blog?tag=${encodeURIComponent(tag)}`"
         class="badge badge-muted hover:bg-gray-200 cursor-pointer transition-colors"
       >
         {{ tag }}

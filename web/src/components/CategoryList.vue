@@ -7,7 +7,7 @@
     <router-link
       v-for="cat in categories"
       :key="cat.name"
-      :to="`/notes?category=${encodeURIComponent(cat.name)}`"
+      :to="`/source/blog?category=${encodeURIComponent(cat.name)}`"
       class="flex items-center justify-between py-2 px-1 rounded-md text-sm transition-colors hover:bg-gray-50"
     >
       <span style="color: var(--color-text);">{{ cat.name }}</span>
