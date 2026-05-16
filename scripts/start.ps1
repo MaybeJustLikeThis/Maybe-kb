@@ -38,24 +38,18 @@ function Find-Python {
         "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
         "$env:APPDATA\uv\python\cpython-3.13.*-windows-x86_64-none\bin\python3.exe",
-        "$env:APPDATA\uv\python\cpython-3.12.*-windows-x86_64-none\bin\python3.exe",
-        "C:\Python313\python.exe",
-        "C:\Python312\python.exe"
+        "C:\Python313\python.exe"
     )
 
     foreach ($p in $candidates) {
         if ($p -and (Test-Path $p)) {
             $result = & $p --version 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                return $p
-            }
+            if ($LASTEXITCODE -eq 0) { return $p }
         }
     }
 
-    # Last resort: try globbing
     $installed = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue |
-        Sort-Object FullName -Descending |
-        Select-Object -First 1
+        Sort-Object FullName -Descending | Select-Object -First 1
     if ($installed) { return $installed.FullName }
 
     throw "Python not found. Install from https://www.python.org/downloads/"
@@ -68,19 +62,18 @@ Write-Host "[kb] Python: $Python" -ForegroundColor Cyan
 $required = @("uvicorn", "fastapi", "typer", "rich")
 $missing = @()
 foreach ($pkg in $required) {
-    $check = & $Python -c "import $pkg" 2>&1
+    & $Python -c "import $pkg" 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { $missing += $pkg }
 }
 if ($missing) {
     Write-Host "[kb] Missing packages: $($missing -join ', ')" -ForegroundColor Yellow
     Write-Host "[kb] Run: pip install -r requirements.txt" -ForegroundColor Yellow
-    Write-Host "[kb] (requirements.txt not found — install manually or create one)" -ForegroundColor Yellow
-    # Don't exit — maybe the user knows what they're doing
 }
 
 # ── 3. Kill stale processes on target ports ─────────────────────
 function Free-Port($port) {
-    $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+    $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
+        Where-Object { $_.OwningProcess -ne 0 }
     if (-not $conn) { return }
     $pids = $conn | Select-Object -ExpandProperty OwningProcess -Unique
     foreach ($id in $pids) {
@@ -100,13 +93,14 @@ Free-Port $FrontendPort
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $ServerLog = Join-Path $LogDir "server.log"
 
-$backendArgs = @("-m", "kb.cli", "serve", "--host", "127.0.0.1", "--port", $BackendPort)
-if ($SkipWatch) { $backendArgs += "--skip-watch" }
+$ServeScript = Join-Path $PSScriptRoot "_serve.py"
+$backendArgList = @($ServeScript, "serve", "--host", "127.0.0.1", "--port", $BackendPort)
+if ($SkipWatch) { $backendArgList += "--skip-watch" }
 
 Write-Host "[kb] Starting backend on port ${BackendPort}..." -ForegroundColor Cyan
 
 $backendProc = Start-Process -FilePath $Python `
-    -ArgumentList $backendArgs `
+    -ArgumentList $backendArgList `
     -WorkingDirectory $ProjectRoot `
     -RedirectStandardOutput $ServerLog `
     -RedirectStandardError "$LogDir\server-error.log" `
@@ -116,9 +110,17 @@ $backendProc = Start-Process -FilePath $Python `
 # ── 5. Start frontend ───────────────────────────────────────────
 $ViteLog = Join-Path $LogDir "vite.log"
 
+$NpxCmd = if (Get-Command npx.cmd -ErrorAction SilentlyContinue) {
+    (Get-Command npx.cmd).Source
+} elseif (Get-Command npx -ErrorAction SilentlyContinue) {
+    (Get-Command npx).Source
+} else {
+    throw "npx not found. Install Node.js from https://nodejs.org/"
+}
+
 Write-Host "[kb] Starting frontend on port ${FrontendPort}..." -ForegroundColor Cyan
 
-$frontendProc = Start-Process -FilePath "npx" `
+$frontendProc = Start-Process -FilePath $NpxCmd `
     -ArgumentList @("vite", "--host", "127.0.0.1", "--port", $FrontendPort, "--strictPort") `
     -WorkingDirectory (Join-Path $ProjectRoot "web") `
     -RedirectStandardOutput $ViteLog `
@@ -153,13 +155,19 @@ while ((-not $backendUp -or -not $frontendUp) -and $elapsed -lt $timeout) {
         } catch {}
     }
 
-    # Check if either process died
     if ($backendProc.HasExited -and -not $backendUp) {
         Write-Host "[kb] Backend failed to start. Check $ServerLog" -ForegroundColor Red
+        # Print last lines of error log
+        if (Test-Path "$LogDir\server-error.log") {
+            Get-Content "$LogDir\server-error.log" -Tail 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        }
         break
     }
     if ($frontendProc.HasExited -and -not $frontendUp) {
         Write-Host "[kb] Frontend failed to start. Check $ViteLog" -ForegroundColor Red
+        if (Test-Path "$LogDir\vite-error.log") {
+            Get-Content "$LogDir\vite-error.log" -Tail 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        }
         break
     }
 }

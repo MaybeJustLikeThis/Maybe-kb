@@ -65,10 +65,11 @@ free_port "$FRONTEND_PORT"
 export PYTHONPATH="$PROJECT_ROOT/src"
 echo "[kb] Starting backend on port ${BACKEND_PORT}..."
 
-BACKEND_ARGS=(-m kb.cli serve --host 127.0.0.1 --port "$BACKEND_PORT")
-[[ -n "$SKIP_WATCH" ]] && BACKEND_ARGS+=(--skip-watch)
+SERVE_SCRIPT="$SCRIPT_DIR/_serve.py"
+SERVE_ARGS=(serve --host 127.0.0.1 --port "$BACKEND_PORT")
+[[ -n "$SKIP_WATCH" ]] && SERVE_ARGS+=(--skip-watch)
 
-nohup "$PYTHON" "${BACKEND_ARGS[@]}" \
+nohup "$PYTHON" "$SERVE_SCRIPT" "${SERVE_ARGS[@]}" \
     > "$LOG_DIR/server.log" 2> "$LOG_DIR/server-error.log" &
 BACKEND_PID=$!
 
