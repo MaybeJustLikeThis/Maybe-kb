@@ -33,6 +33,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     def list_notes(
         category: str | None = Query(None),
         tag: str | None = Query(None),
+        source_project: str | None = Query(None),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ):
@@ -40,6 +41,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             ctx,
             category=category,
             tag=tag,
+            source_project=source_project,
             limit=limit,
             offset=offset,
         )
@@ -61,7 +63,6 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 body.category,
                 body.tags,
                 body.description,
-                entry_type=body.entry_type,
                 source_project=body.source_project,
                 source_path=body.source_path,
                 source_context=body.source_context,
@@ -134,6 +135,19 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     @router.get("/dashboard")
     def get_dashboard():
         return responses.ok(queries.get_dashboard_stats(ctx))
+
+    @router.get("/sources")
+    def get_sources():
+        sources = []
+        if ctx.config and ctx.config.sources:
+            for name, s in ctx.config.sources.items():
+                sources.append({
+                    "name": name,
+                    "label": s.label,
+                    "description": s.description,
+                    "icon": s.icon,
+                })
+        return responses.ok({"sources": sources})
 
     @router.get("/dashboard/activity")
     def get_dashboard_activity(limit: int = Query(8, ge=1, le=20)):
