@@ -55,7 +55,6 @@ class Note:
     updated_at: str | None = None
     status: str = "published"
     file_hash: str | None = None
-    entry_type: str | None = None
     source_project: str | None = None
     source_path: str | None = None
     source_context: str | None = None
@@ -85,7 +84,6 @@ class Note:
         if isinstance(attachments, str):
             attachments = [attachments]
         status = frontmatter.get("status", "published")
-        entry_type = frontmatter.get("type")
         source_project = frontmatter.get("source_project")
         source_path = frontmatter.get("source_path")
         source_context = frontmatter.get("source_context")
@@ -95,7 +93,7 @@ class Note:
             "title", "tags", "categories", "category",
             "date", "created", "updated", "description",
             "attachments", "status",
-            "type", "source_project", "source_path",
+            "source_project", "source_path",
             "source_context", "content_type",
         }
         extra = {k: v for k, v in frontmatter.items() if k not in managed_keys}
@@ -113,7 +111,6 @@ class Note:
             status=status,
             file_hash=file_hash,
             extra_frontmatter=extra,
-            entry_type=entry_type,
             source_project=source_project,
             source_path=source_path,
             source_context=source_context,
