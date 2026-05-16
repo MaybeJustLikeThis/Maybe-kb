@@ -88,9 +88,8 @@ async function ask() {
     const res = await api.chatAsk(q)
     messages.value.push({ id: ++nextId, role: 'assistant', content: res.answer })
   } catch (e) {
-    const providerNotConfigured = e instanceof ApiError
-      ? e.code === 'PROVIDER_NOT_CONFIGURED'
-      : e instanceof Error && e.message.includes('config required')
+    const providerNotConfigured =
+      e instanceof ApiError && e.code === 'PROVIDER_NOT_CONFIGURED'
     const message = providerNotConfigured
       ? 'Chat providers are not configured yet. Configure LLM and embedding providers, then ask again.'
       : `Error: ${e instanceof Error ? e.message : 'Unknown error'}`
