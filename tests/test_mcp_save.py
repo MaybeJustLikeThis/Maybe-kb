@@ -7,7 +7,7 @@ from kb.core.config import KBConfig, EmbeddingConfig, LLMConfig, SearchConfig, R
 
 
 def test_kb_save_design_decision_creates_note(tmp_path: Path):
-    """kb_save_design_decision creates a note with correct type."""
+    """kb_save_design_decision creates a note."""
     os.chdir(tmp_path)
     (tmp_path / "notes").mkdir()
     (tmp_path / ".kb").mkdir()
@@ -34,7 +34,8 @@ def test_kb_save_design_decision_creates_note(tmp_path: Path):
         assert result is not None
         content_list = result[0] if isinstance(result, tuple) else result
         data = content_list[0].text if hasattr(content_list[0], "text") else str(content_list[0])
-        assert "design-decision" in data
+        assert "file_id" in data
+        assert "source_project" in data
 
     anyio.run(_run)
 

@@ -84,7 +84,6 @@ def test_v1_create_get_update_delete_note(client: TestClient) -> None:
         "content": "Hello v1",
         "category": "tech",
         "tags": ["api", "v1"],
-        "entry_type": "tech-article",
         "source_project": "kb",
         "content_type": "markdown",
     })
@@ -95,7 +94,6 @@ def test_v1_create_get_update_delete_note(client: TestClient) -> None:
     assert created["title"] == "API V1 Note"
     assert created["content"].rstrip("\n") == "Hello v1"
     assert created["tags"] == ["api", "v1"]
-    assert created["entry_type"] == "tech-article"
     file_id = created["file_id"]
 
     get_resp = client.get(f"/api/v1/notes/{file_id}")
@@ -160,7 +158,6 @@ def test_v1_taxonomy_returns_unified_taxonomy(client: TestClient) -> None:
         "content": "Body",
         "category": "tech",
         "tags": ["python"],
-        "entry_type": "tech-article",
         "source_project": "kb",
         "content_type": "markdown",
     })
@@ -170,7 +167,6 @@ def test_v1_taxonomy_returns_unified_taxonomy(client: TestClient) -> None:
     data = response.json()["data"]
     assert "python" in data["tags"]
     assert data["categories"][0]["name"] == "tech"
-    assert data["entry_types"][0]["name"] == "tech-article"
     assert data["source_projects"][0]["name"] == "kb"
     assert data["content_types"][0]["name"] == "markdown"
 
@@ -180,7 +176,6 @@ def test_v1_dashboard_returns_summary(client: TestClient) -> None:
     client.post("/api/v1/notes", json={
         "title": "Dashboard Note",
         "content": "Body",
-        "entry_type": "document",
         "source_project": "kb",
         "content_type": "markdown",
     })
@@ -191,7 +186,6 @@ def test_v1_dashboard_returns_summary(client: TestClient) -> None:
     assert data["notes_count"] == 1
     assert "attachments_count" in data
     assert data["index_health"]["notes_count"] == 1
-    assert data["type_distribution"][0]["name"] == "document"
 
 
 def test_v1_dashboard_activity_returns_empty_envelope(client: TestClient) -> None:

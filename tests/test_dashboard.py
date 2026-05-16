@@ -24,14 +24,14 @@ def tmp_vault(tmp_path: Path):
         file_id="notes/tech/docker.md", title="Docker 基础",
         content="Docker 是一个容器化平台。", category="tech",
         tags=["docker", "container"], status="published",
-        file_hash="abc123", entry_type="tech-article",
+        file_hash="abc123",
         source_project="kb", content_type="markdown",
     )
     note2 = Note(
         file_id="notes/life/reading.md", title="阅读习惯",
         content="每天阅读一小时。", category="life",
         tags=["reading", "life"], status="published",
-        file_hash="def456", entry_type="document",
+        file_hash="def456",
         source_project="kb", content_type="markdown",
     )
     ctx.db.upsert_note(note1)
@@ -128,22 +128,6 @@ def test_list_notes_sort(tmp_vault):
     assert len(notes) >= 2
     # note_b has later updated_at, should appear first
     assert notes[0]["file_id"] == "notes/sort_b.md"
-
-
-def test_get_type_distribution(tmp_vault):
-    tmp_path, client = tmp_vault
-    resp = client.get("/api/type-distribution")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "types" in data
-    assert len(data["types"]) == 2  # tech-article, document
-    names = {t["name"] for t in data["types"]}
-    assert "tech-article" in names
-    assert "document" in names
-    for t in data["types"]:
-        assert "name" in t
-        assert "count" in t
-        assert "label" in t
 
 
 def test_get_source_projects(tmp_vault):

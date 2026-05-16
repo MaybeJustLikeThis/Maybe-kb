@@ -153,7 +153,7 @@ def test_database_new_columns_present(tmp_path: Path):
     conn = db._connect()
     info = conn.execute("PRAGMA table_info(notes)").fetchall()
     cols = {row["name"] for row in info}
-    for col in ["entry_type", "source_project", "source_path", "source_context", "content_type"]:
+    for col in ["source_project", "source_path", "source_context", "content_type"]:
         assert col in cols, f"Column {col} missing"
     db.close()
 

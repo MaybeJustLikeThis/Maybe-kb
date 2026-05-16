@@ -70,7 +70,6 @@ def test_get_dashboard_stats_unifies_sources(ctx):
         tags=["python"],
         status="published",
         file_hash="a",
-        entry_type="tech-article",
         source_project="kb",
         content_type="markdown",
     ))
@@ -80,6 +79,5 @@ def test_get_dashboard_stats_unifies_sources(ctx):
     assert stats["notes_count"] == 1
     assert stats["attachments_count"] == 1
     assert stats["index_health"]["notes_count"] == 1
-    assert stats["type_distribution"][0]["name"] == "tech-article"
     assert stats["source_projects"][0]["name"] == "kb"
     assert stats["content_types"][0]["name"] == "markdown"
