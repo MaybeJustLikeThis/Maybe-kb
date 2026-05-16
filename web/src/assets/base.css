@@ -168,6 +168,11 @@ a {
   color: var(--color-text-secondary);
 }
 
+.badge-type {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 .empty-state {
   text-align: center;
   padding: 48px 24px;

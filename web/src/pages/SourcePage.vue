@@ -33,7 +33,12 @@
               :class="['filter-chip', !selectedTag ? 'filter-chip-active' : '']"
             >All</button>
             <button
-              v-for="tag in tags" :key="tag"
+              v-for="tag in typeTags" :key="tag"
+              @click="selectedTag = tag"
+              :class="['filter-chip type-chip', selectedTag === tag ? 'filter-chip-active' : '']"
+            >{{ tag.replace('Type-', '') }}</button>
+            <button
+              v-for="tag in topicTags" :key="tag"
               @click="selectedTag = tag"
               :class="['filter-chip', selectedTag === tag ? 'filter-chip-active' : '']"
             >{{ tag }}</button>
@@ -63,7 +68,7 @@
                   <h3 class="font-semibold truncate" style="color: var(--color-text);">{{ note.title }}</h3>
                   <div class="flex flex-wrap gap-1.5 mt-1.5">
                     <span v-if="note.category" class="badge badge-primary">{{ note.category }}</span>
-                    <span v-for="tag in note.tags" :key="tag" class="badge badge-muted">{{ tag }}</span>
+                    <span v-for="tag in note.tags" :key="tag" :class="['badge', tag.startsWith('Type-') ? 'badge-type' : 'badge-muted']">{{ tag.startsWith('Type-') ? tag.replace('Type-', '') : tag }}</span>
                   </div>
                   <p v-if="note.description" class="text-sm mt-2 truncate" style="color: var(--color-text-secondary);">{{ note.description }}</p>
                 </div>
@@ -93,6 +98,9 @@ const selectedTag = ref((route.query.tag as string) || '')
 const loading = ref(true)
 
 const sourceLabel = computed(() => props.name.charAt(0).toUpperCase() + props.name.slice(1))
+
+const typeTags = computed(() => tags.value.filter(t => t.startsWith('Type-')))
+const topicTags = computed(() => tags.value.filter(t => !t.startsWith('Type-')))
 
 function extractFilters(ns: Note[]) {
   const catSet = new Set<string>()
@@ -151,5 +159,15 @@ watch([selectedCategory, selectedTag], () => load())
   background: var(--color-primary-light);
   color: var(--color-primary-hover);
   font-weight: 700;
+}
+
+.type-chip {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.type-chip.filter-chip-active {
+  background: #dbeafe;
+  color: #1e40af;
 }
 </style>

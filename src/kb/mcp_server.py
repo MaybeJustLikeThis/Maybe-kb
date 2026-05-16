@@ -131,9 +131,12 @@ def create_mcp_server(config: KBConfig):
         design docs) for better search recall. Skip it for short notes and
         code snippets where the title is already enough.
 
-        Examples: technical analysis, troubleshooting logs, design decisions,
-        code patterns, document summaries, research notes.
+        Tag your note with a Type-* tag to classify it across all sources:
+        Type-Troubleshooting, Type-DesignDecision, Type-CodeSnippet,
+        Type-TechArticle, Type-Document. Combine with topic tags freely
+        (e.g. tags: "Type-Troubleshooting, Python, memory-leak").
         """
+<｜｜DSML｜｜parameter name="new_string" string="true">
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         try:
             note = services.create_note(
