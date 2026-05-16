@@ -120,6 +120,7 @@ def get_dashboard_activity(ctx: AppContext, limit: int) -> list[dict]:
             "note": {
                 "file_id": note["file_id"],
                 "title": note["title"],
+                "source_project": note.get("source_project"),
             },
         })
     return items

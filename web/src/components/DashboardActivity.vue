@@ -17,7 +17,7 @@
     <ol v-else class="activity-list">
       <li v-for="item in items" :key="`${item.note.file_id}-${item.timestamp ?? item.title}`" class="activity-item">
         <span class="activity-dot" aria-hidden="true"></span>
-        <router-link :to="`/note/${encodeURIComponent(item.note.file_id)}`" class="activity-link">
+        <router-link :to="item.note.source_project ? `/source/${item.note.source_project}/${encodeURIComponent(item.note.file_id)}` : `/note/${encodeURIComponent(item.note.file_id)}`" class="activity-link">
           <span class="activity-title">{{ item.title }}</span>
           <span class="activity-description">{{ item.description || item.note.title }}</span>
           <span class="activity-time">{{ formatTime(item.timestamp) }}</span>

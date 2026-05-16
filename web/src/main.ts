@@ -15,6 +15,7 @@ const routes = [
   { path: '/', component: OverviewPage },
   { path: '/source/:name', component: SourcePage, props: true },
   { path: '/source/:name/:fileId', component: NoteDetail, props: true },
+  { path: '/note/:fileId', component: NoteDetail, props: true },
   { path: '/manage', component: ManagePage },
   { path: '/search', component: SearchPage },
   { path: '/chat', component: ChatPage },

@@ -56,7 +56,7 @@
           <router-link
             v-for="note in relatedNotes"
             :key="note.file_id"
-            :to="`/note/${encodeURIComponent(note.file_id)}`"
+            :to="note.source_project ? `/source/${note.source_project}/${encodeURIComponent(note.file_id)}` : `/note/${encodeURIComponent(note.file_id)}`"
             class="card flex justify-between items-start"
           >
             <div>
@@ -99,7 +99,7 @@ const loading = ref(false)
 const isEditing = ref(isNew.value)
 const noteUpdatedAt = ref('')
 const tags = ref<string[]>([])
-const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; score: number }>>([])
+const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; source_project: string | null; score: number }>>([])
 const relatedError = ref(false)
 
 const marked = new Marked(

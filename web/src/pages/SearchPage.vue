@@ -43,7 +43,7 @@
       <ul class="results-list">
         <li v-for="result in results" :key="result.note.file_id" class="result-item">
           <router-link
-            :to="`/note/${encodeURIComponent(result.note.file_id)}`"
+            :to="result.note.source_project ? `/source/${result.note.source_project}/${encodeURIComponent(result.note.file_id)}` : `/note/${encodeURIComponent(result.note.file_id)}`"
             class="result-card"
           >
             <div class="result-main">

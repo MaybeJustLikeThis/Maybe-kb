@@ -120,6 +120,7 @@ export interface DashboardActivityItem {
   note: {
     file_id: string
     title: string
+    source_project: string | null
   }
 }
 

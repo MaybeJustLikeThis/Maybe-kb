@@ -8,7 +8,7 @@
     <ul v-else class="space-y-1">
       <li v-for="note in notes" :key="note.file_id">
         <router-link
-          :to="`/note/${encodeURIComponent(note.file_id)}`"
+          :to="note.source_project ? `/source/${note.source_project}/${encodeURIComponent(note.file_id)}` : `/note/${encodeURIComponent(note.file_id)}`"
           class="recent-link"
         >
           <div class="flex items-center gap-3 min-w-0">
