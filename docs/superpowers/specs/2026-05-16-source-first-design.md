@@ -86,6 +86,10 @@ icon = "MN"
 
 Remove all `[kb_types.*]` sections. Add `config.sources` to `KBConfig`.
 
+**MCP server cleanup:**
+
+`src/kb/mcp_server.py:123` references `config.kb_types.get(entry_type)` to look up default tags. Remove this lookup. The MCP save tools will stop auto-populating default tags based on entry type.
+
 ### 4. Backend Changes
 
 **New endpoint:**
@@ -94,13 +98,24 @@ Remove all `[kb_types.*]` sections. Add `config.sources` to `KBConfig`.
 GET  /api/v1/sources  →  return sources config from config.toml
 ```
 
+Response shape:
+```json
+{
+  "sources": [
+    {"name": "blog", "label": "博客", "icon": "BK", "description": "Hexo 博客文章"},
+    {"name": "agent", "label": "Agent 沉淀", "icon": "AG", "description": "Agent 自动沉淀的知识"},
+    {"name": "manual", "label": "手动录入", "icon": "MN", "description": "手动创建的知识笔记"}
+  ]
+}
+```
+
 **listNotes add source_project filter:**
 
 ```
 GET  /api/v1/notes?source_project=blog
 ```
 
-`queries.list_notes()` gains optional `source_project` parameter.
+`queries.list_notes()` and `Database.list_notes()` both gain optional `source_project` parameter. The database method adds `WHERE n.source_project = ?` when the parameter is provided.
 
 **Removed endpoint:**
 
@@ -109,6 +124,19 @@ GET  /api/v1/type-distribution
 ```
 
 This route is deleted from the router. The corresponding query function (`get_type_distribution()`) is removed. `get_content_types()` (file format stats) is kept — it is unrelated to `entry_type`.
+
+`get_source_projects()` is updated to resolve labels from `config.sources`:
+
+```python
+def get_source_projects(ctx: AppContext) -> list[dict]:
+    labels = {}
+    if ctx.config and ctx.config.sources:
+        labels = {name: s.label for name, s in ctx.config.sources.items()}
+    return [
+        count_item(row["source_project"], row["count"], labels.get(row["source_project"]))
+        for row in ctx.db.list_source_projects()
+    ]
+```
 
 **Refactored endpoints:**
 
@@ -142,10 +170,17 @@ This route is deleted from the router. The corresponding query function (`get_ty
 
 **Config (`config.py`):**
 
-- Add `SourceConfig` dataclass with `label`, `description`, `icon`
-- Add `sources: dict[str, SourceConfig]` to `KBConfig`
-- Remove `kb_types` from `KBConfig`
-- Update `load_config()` parsing
+- Add `SourceConfig` dataclass:
+  ```python
+  @dataclass
+  class SourceConfig:
+      label: str
+      description: str = ""
+      icon: str = ""
+  ```
+- Add `sources: dict[str, SourceConfig] = field(default_factory=dict)` to `KBConfig`
+- Remove `kb_types` and `KBTypeConfig` from `KBConfig`
+- Update `load_config()`: parse `[sources.*]` sections instead of `[kb_types.*]`
 
 ### 5. Frontend Changes
 
@@ -176,7 +211,7 @@ Template renders navItems, then a `<hr>` divider, then sourceTabs.
 | `NoteList` | `SourcePage` | Filter notes by `source_project` from route `:name` param |
 | `NoteDetail` | `NoteDetail` | Route changed to `/source/:name/:fileId`; back link points to source tab |
 | `TypeDistribution.vue` | — | Delete |
-| `ManagePage` | `ManagePage` | Source management replaces type management |
+| `ManagePage` | `ManagePage` | Replace type config UI with source config UI (`[sources.*]` from config.toml) |
 
 **api.ts changes:**
 
@@ -229,7 +264,7 @@ Split into two independent streams. The spec is the contract.
 - [ ] Sidebar shows function entries + source tabs with divider
 - [ ] Each source tab navigates to `/source/:name` showing filtered notes
 - [ ] Overview shows source distribution instead of type distribution
-- [ ] Search filters by source
+- [ ] Source tabs loaded dynamically from `GET /api/v1/sources` response
 - [ ] All 24 existing notes visible under "博客" tab
 - [ ] `GET /api/v1/dashboard` returns `source_projects` with correct counts
 - [ ] `GET /api/v1/sources` returns sources config
