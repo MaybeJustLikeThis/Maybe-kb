@@ -119,8 +119,8 @@ class Database:
             """
             INSERT INTO notes (id, title, description, content, tags,
                                category, created_at, updated_at, status, file_hash,
-                               entry_type, source_project, source_path, source_context, content_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               source_project, source_path, source_context, content_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title,
                 description=excluded.description,
@@ -131,7 +131,6 @@ class Database:
                 updated_at=excluded.updated_at,
                 status=excluded.status,
                 file_hash=excluded.file_hash,
-                entry_type=excluded.entry_type,
                 source_project=excluded.source_project,
                 source_path=excluded.source_path,
                 source_context=excluded.source_context,
@@ -148,7 +147,6 @@ class Database:
                 note.updated_at,
                 note.status,
                 note.file_hash,
-                note.entry_type,
                 note.source_project,
                 note.source_path,
                 note.source_context,
