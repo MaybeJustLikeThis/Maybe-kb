@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-bold" style="color: var(--color-text);">{{ sourceLabel }}</h2>
       <router-link
-        to="/note/new"
+        :to="`/note/new?source_project=${props.name}`"
         class="btn btn-primary"
       >New Note</router-link>
     </div>
@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, type Note } from '../api'
 
@@ -90,23 +90,9 @@ const categories = ref<string[]>([])
 const tags = ref<string[]>([])
 const selectedCategory = ref((route.query.category as string) || '')
 const selectedTag = ref((route.query.tag as string) || '')
-const loading = ref(false)
+const loading = ref(true)
 
 const sourceLabel = computed(() => props.name.charAt(0).toUpperCase() + props.name.slice(1))
-
-async function load() {
-  loading.value = true
-  try {
-    const params: { source_project: string; category?: string; tag?: string } = {
-      source_project: props.name,
-    }
-    if (selectedCategory.value) params.category = selectedCategory.value
-    if (selectedTag.value) params.tag = selectedTag.value
-    notes.value = await api.listNotes(params)
-  } finally {
-    loading.value = false
-  }
-}
 
 function extractFilters(ns: Note[]) {
   const catSet = new Set<string>()
@@ -119,12 +105,29 @@ function extractFilters(ns: Note[]) {
   tags.value = [...tagSet].sort()
 }
 
-onMounted(async () => {
-  // Load all notes for this source to derive its categories and tags
-  const all = await api.listNotes({ source_project: props.name, limit: 200 })
-  extractFilters(all)
-  load()
-})
+async function load() {
+  loading.value = true
+  selectedCategory.value = (route.query.category as string) || ''
+  selectedTag.value = (route.query.tag as string) || ''
+  try {
+    const params: { source_project: string; category?: string; tag?: string } = {
+      source_project: props.name,
+    }
+    if (selectedCategory.value) params.category = selectedCategory.value
+    if (selectedTag.value) params.tag = selectedTag.value
+    const result = await api.listNotes(params)
+    notes.value = result
+    // Derive filters from unfiltered source notes
+    if (!selectedCategory.value && !selectedTag.value) {
+      extractFilters(result)
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+// Load on mount AND when source name changes
+watch(() => props.name, () => load(), { immediate: true })
 
 watch([selectedCategory, selectedTag], () => load())
 </script>
