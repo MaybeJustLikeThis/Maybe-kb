@@ -33,12 +33,10 @@ class RAGConfig:
 
 
 @dataclass(frozen=True)
-class KBTypeConfig:
-    """Configuration for a single knowledge type."""
+class SourceConfig:
     label: str
-    description: str
-    default_tags: list[str] = field(default_factory=list)
-    parser: str = "markdown"
+    description: str = ""
+    icon: str = ""
 
 
 @dataclass(frozen=True)
@@ -56,7 +54,7 @@ class KBConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     rag: RAGConfig = field(default_factory=RAGConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
-    kb_types: dict[str, KBTypeConfig] = field(default_factory=dict)
+    sources: dict[str, SourceConfig] = field(default_factory=dict)
 
 
 def load_config(base_path: Path) -> KBConfig:
@@ -76,13 +74,12 @@ def load_config(base_path: Path) -> KBConfig:
     rag_data = data.get("rag", {})
     server_data = data.get("server", {})
 
-    kb_types: dict[str, KBTypeConfig] = {}
-    for type_name, raw in data.get("kb_types", {}).items():
-        kb_types[type_name] = KBTypeConfig(
-            label=raw.get("label", type_name),
+    sources: dict[str, SourceConfig] = {}
+    for source_name, raw in data.get("sources", {}).items():
+        sources[source_name] = SourceConfig(
+            label=raw.get("label", source_name),
             description=raw.get("description", ""),
-            default_tags=raw.get("default_tags", []),
-            parser=raw.get("parser", "markdown"),
+            icon=raw.get("icon", ""),
         )
 
     vault_rel = general.get("vault_path", ".")
@@ -109,5 +106,5 @@ def load_config(base_path: Path) -> KBConfig:
             port=server_data.get("port", 8420),
             watch_dir=server_data.get("watch_dir"),
         ),
-        kb_types=kb_types,
+        sources=sources,
     )

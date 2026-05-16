@@ -16,32 +16,17 @@ model = "qwen2.5:7b"
 host = "127.0.0.1"
 port = 8420
 watch_dir = "C:/Users/cherry/Desktop/项目/blog_new/blog_new/source/_posts"
-[kb_types.tech-article]
-label = "技术文章"
-description = "技术分析、教程、原理解析"
-default_tags = []
-parser = "markdown"
+[sources.blog]
+label = "博客"
+description = "Hexo 博客文章"
+icon = "BK"
 
-[kb_types.troubleshooting]
-label = "踩坑记录"
-description = "问题现象、根因、解决方案"
-default_tags = ["troubleshooting"]
-parser = "markdown"
+[sources.agent]
+label = "Agent 沉淀"
+description = "Agent 自动沉淀的知识"
+icon = "AG"
 
-[kb_types.design-decision]
-label = "设计决策"
-description = "架构选择、取舍理由、上下文"
-default_tags = ["design"]
-parser = "markdown"
-
-[kb_types.code-snippet]
-label = "代码片段"
-description = "可复用的代码模式、脚本"
-default_tags = ["snippet"]
-parser = "markdown"
-
-[kb_types.document]
-label = "文档摘要"
-description = "PDF、论文、文档的阅读笔记，可上传文件"
-default_tags = ["document"]
-parser = "auto"
+[sources.manual]
+label = "手动录入"
+description = "手动创建的知识笔记"
+icon = "MN"
