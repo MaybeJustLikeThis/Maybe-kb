@@ -36,7 +36,6 @@ class NoteBase(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     status: str = "published"
-    entry_type: str | None = None
     source_project: str | None = None
     source_path: str | None = None
     source_context: str | None = None
@@ -58,7 +57,6 @@ class NoteCreateRequest(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     tags: list[str] = Field(default_factory=list, max_length=50)
     description: str | None = Field(default=None, max_length=500)
-    entry_type: str | None = Field(default=None, max_length=50)
     source_project: str | None = Field(default=None, max_length=200)
     source_path: str | None = Field(default=None, max_length=500)
     source_context: str | None = Field(default=None, max_length=500)
@@ -72,7 +70,6 @@ class NoteUpdateRequest(BaseModel):
     tags: list[str] | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=500)
     status: str | None = Field(default=None, max_length=20)
-    entry_type: str | None = Field(default=None, max_length=50)
     source_project: str | None = Field(default=None, max_length=200)
     source_path: str | None = Field(default=None, max_length=500)
     source_context: str | None = Field(default=None, max_length=500)
@@ -98,7 +95,6 @@ class CountItem(BaseModel):
 class TaxonomyResponse(BaseModel):
     tags: list[str] = Field(default_factory=list)
     categories: list[CountItem] = Field(default_factory=list)
-    entry_types: list[CountItem] = Field(default_factory=list)
     source_projects: list[CountItem] = Field(default_factory=list)
     content_types: list[CountItem] = Field(default_factory=list)
 
@@ -112,7 +108,6 @@ class IndexHealth(BaseModel):
 class DashboardStats(BaseModel):
     notes_count: int
     attachments_count: int
-    type_distribution: list[CountItem] = Field(default_factory=list)
     source_projects: list[CountItem] = Field(default_factory=list)
     content_types: list[CountItem] = Field(default_factory=list)
     index_health: IndexHealth
