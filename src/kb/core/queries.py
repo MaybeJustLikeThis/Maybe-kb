@@ -22,12 +22,13 @@ def list_notes(
     *,
     category: str | None,
     tag: str | None,
+    source_project: str | None = None,
     limit: int,
     offset: int,
 ) -> PageResult:
     """List note summaries with pagination metadata."""
-    rows = ctx.db.list_notes(category=category, tag=tag, limit=limit, offset=offset)
-    total = ctx.db.count_notes(category=category, tag=tag)
+    rows = ctx.db.list_notes(category=category, tag=tag, source_project=source_project, limit=limit, offset=offset)
+    total = ctx.db.count_notes(category=category, tag=tag, source_project=source_project)
     return PageResult(
         items=[note_row_to_summary(ctx.db, row) for row in rows],
         total=total,
@@ -42,25 +43,13 @@ def get_note_detail(ctx: AppContext, file_id: str) -> dict:
     return note_to_detail(note)
 
 
-def get_type_distribution(ctx: AppContext) -> list[dict]:
-    """Return configured entry type distribution for published notes."""
-    labels = {}
-    if ctx.config and ctx.config.kb_types:
-        labels = {name: item.label for name, item in ctx.config.kb_types.items()}
-    return [
-        count_item(
-            row["entry_type"],
-            row["count"],
-            labels.get(row["entry_type"], row["entry_type"]),
-        )
-        for row in ctx.db.count_notes_by_entry_type()
-    ]
-
-
 def get_source_projects(ctx: AppContext) -> list[dict]:
-    """Return source project distribution for published notes."""
+    """Return source project distribution with labels from config."""
+    labels: dict[str, str] = {}
+    if ctx.config and ctx.config.sources:
+        labels = {name: s.label for name, s in ctx.config.sources.items()}
     return [
-        count_item(row["source_project"], row["count"])
+        count_item(row["source_project"], row["count"], labels.get(row["source_project"]))
         for row in ctx.db.list_source_projects()
     ]
 
@@ -104,7 +93,6 @@ def get_dashboard_stats(ctx: AppContext) -> dict:
     return {
         "notes_count": index_health["notes_count"],
         "attachments_count": get_attachments_count(ctx),
-        "type_distribution": get_type_distribution(ctx),
         "source_projects": get_source_projects(ctx),
         "content_types": get_content_types(ctx),
         "index_health": index_health,
@@ -123,8 +111,6 @@ def get_dashboard_activity(ctx: AppContext, limit: int) -> list[dict]:
             description_parts.append(f"Source: {note['source_project']}")
         if note.get("category"):
             description_parts.append(f"Category: {note['category']}")
-        if note.get("entry_type"):
-            description_parts.append(f"Type: {note['entry_type']}")
         description = " / ".join(description_parts) or "Knowledge note updated"
         items.append({
             "kind": "note_updated",
@@ -148,7 +134,6 @@ def get_taxonomy(ctx: AppContext) -> dict:
     return {
         "tags": ctx.db.list_all_tags(),
         "categories": categories,
-        "entry_types": get_type_distribution(ctx),
         "source_projects": get_source_projects(ctx),
         "content_types": get_content_types(ctx),
     }
