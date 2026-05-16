@@ -109,18 +109,31 @@ def create_mcp_server(config: KBConfig):
             "content": note.content,
         }
 
-    def _save_note(
-        source_project: str,
+    @mcp.tool()
+    def kb_save(
         title: str,
         content: str,
-        source_context: str = "",
+        source_project: str,
         tags: str = "",
+        source_context: str = "",
+        category: str = "",
     ) -> dict:
-        """Shared helper for kb_save_* tools."""
+        """Save a knowledge note to the vault. tags is comma-separated.
+
+        Choose source_project from the configured sources (blog, agent, manual).
+
+        Write well-structured Markdown content. A good note has a clear title,
+        explains the core idea up front, provides context (why it matters),
+        and ends with actionable takeaways or open questions.
+
+        Examples of what to save: technical analysis, troubleshooting logs,
+        design decisions, code patterns, document summaries, research notes.
+        """
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
         try:
             note = services.create_note(
                 vault, db, title, content,
+                category=category or None,
                 source_project=source_project or None,
                 source_context=source_context or None,
                 tags=tag_list,
@@ -133,71 +146,6 @@ def create_mcp_server(config: KBConfig):
             "source_project": note.source_project,
             "tags": note.tags,
         }
-
-    @mcp.tool()
-    def kb_save_tech_article(
-        title: str,
-        content: str,
-        source_project: str = "",
-        source_context: str = "",
-        tags: str = "",
-    ) -> dict:
-        """Save a 技术文章 (tech article). 适合：技术分析、教程、原理解析。
-        写清楚：核心技术点、适用场景、局限性。"""
-        return _save_note(source_project, title, content,
-                          source_context, tags)
-
-    @mcp.tool()
-    def kb_save_troubleshooting(
-        title: str,
-        content: str,
-        source_project: str = "",
-        source_context: str = "",
-        tags: str = "",
-    ) -> dict:
-        """Save a 踩坑记录 (troubleshooting entry). 适合：问题排查、bug修复记录。
-        写清楚：现象→根因→方案→预防。"""
-        return _save_note(source_project, title, content,
-                          source_context, tags)
-
-    @mcp.tool()
-    def kb_save_design_decision(
-        title: str,
-        content: str,
-        source_project: str = "",
-        source_context: str = "",
-        tags: str = "",
-    ) -> dict:
-        """Save a 设计决策 (design decision). 适合：架构选择、技术取舍。
-        写清楚：背景→方案对比→选择理由→何时需要重新评估。"""
-        return _save_note(source_project, title, content,
-                          source_context, tags)
-
-    @mcp.tool()
-    def kb_save_code_snippet(
-        title: str,
-        content: str,
-        source_project: str = "",
-        source_context: str = "",
-        tags: str = "",
-    ) -> dict:
-        """Save a 代码片段 (code snippet). 适合：可复用的代码模式、脚本。
-        写清楚：用途、依赖、边界条件、使用示例。"""
-        return _save_note(source_project, title, content,
-                          source_context, tags)
-
-    @mcp.tool()
-    def kb_save_document(
-        title: str,
-        content: str,
-        source_project: str = "",
-        source_context: str = "",
-        tags: str = "",
-    ) -> dict:
-        """Save a 文档摘要 (document summary). 适合：PDF、论文、文档的阅读笔记。
-        写清楚：核心论点、关键数据、个人评价。支持上传文件提取文本后调用。"""
-        return _save_note(source_project, title, content,
-                          source_context, tags)
 
     @mcp.tool()
     def kb_rag_query(query: str, top_k: int = 5) -> dict:
