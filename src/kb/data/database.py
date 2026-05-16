@@ -206,6 +206,7 @@ class Database:
         self,
         category: str | None = None,
         tag: str | None = None,
+        source_project: str | None = None,
         status: str = "published",
         limit: int = 100,
         sort: str | None = None,
@@ -226,6 +227,10 @@ class Database:
             conditions.append("n.category = ?")
             params.append(category)
 
+        if source_project:
+            conditions.append("n.source_project = ?")
+            params.append(source_project)
+
         query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY n.updated_at DESC, n.created_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
@@ -236,6 +241,7 @@ class Database:
         self,
         category: str | None = None,
         tag: str | None = None,
+        source_project: str | None = None,
         status: str = "published",
     ) -> int:
         """Count notes with the same filters as list_notes."""
@@ -252,6 +258,10 @@ class Database:
         if category:
             conditions.append("n.category = ?")
             params.append(category)
+
+        if source_project:
+            conditions.append("n.source_project = ?")
+            params.append(source_project)
 
         query += " WHERE " + " AND ".join(conditions)
         row = conn.execute(query, params).fetchone()
