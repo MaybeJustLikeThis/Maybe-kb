@@ -53,7 +53,6 @@ export interface NoteSummary {
   created_at: string | null
   updated_at: string | null
   status: string
-  entry_type: string | null
   source_project: string | null
   source_path: string | null
   source_context: string | null
@@ -86,7 +85,6 @@ export interface CountItem {
 export interface Taxonomy {
   tags: string[]
   categories: CountItem[]
-  entry_types: CountItem[]
   source_projects: CountItem[]
   content_types: CountItem[]
 }
@@ -94,7 +92,6 @@ export interface Taxonomy {
 export interface DashboardStats {
   notes_count: number
   attachments_count: number
-  type_distribution: CountItem[]
   source_projects: CountItem[]
   content_types: CountItem[]
   index_health: {
@@ -102,6 +99,17 @@ export interface DashboardStats {
     vectors_count: number
     coverage: number
   }
+}
+
+export interface SourceItem {
+  name: string
+  label: string
+  description: string
+  icon: string
+}
+
+export interface SourcesResponse {
+  sources: SourceItem[]
 }
 
 export interface DashboardActivityItem {
@@ -119,12 +127,14 @@ export const api = {
   listNotes(params?: {
     category?: string
     tag?: string
+    source_project?: string
     limit?: number
     offset?: number
   }) {
     const qs = new URLSearchParams()
     if (params?.category) qs.set('category', params.category)
     if (params?.tag) qs.set('tag', params.tag)
+    if (params?.source_project) qs.set('source_project', params.source_project)
     if (params?.limit) qs.set('limit', String(params.limit))
     if (params?.offset) qs.set('offset', String(params.offset))
     const q = qs.toString()
@@ -141,7 +151,6 @@ export const api = {
     category?: string
     tags?: string[]
     description?: string | null
-    entry_type?: string | null
     source_project?: string | null
     source_path?: string | null
     source_context?: string | null
@@ -211,16 +220,14 @@ export const api = {
     }))
   },
 
-  getTypeDistribution() {
-    return request<DashboardStats>('/dashboard').then((stats) => ({
-      types: stats.type_distribution,
-    }))
-  },
-
   getSourceProjects() {
     return request<DashboardStats>('/dashboard').then((stats) => ({
       projects: stats.source_projects,
     }))
+  },
+
+  getSources() {
+    return request<SourcesResponse>('/sources').then((data) => data.sources)
   },
 
   getContentTypeStats() {
