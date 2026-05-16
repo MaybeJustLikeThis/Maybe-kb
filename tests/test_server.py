@@ -179,8 +179,8 @@ def test_search(client):
 
 def test_get_tags(client):
     """GET /api/tags returns all tags."""
-    client.post("/api/notes", json={"title": "A", "tags": ["python", "web"]})
-    client.post("/api/notes", json={"title": "B", "tags": ["python", "fastapi"]})
+    client.post("/api/notes", json={"title": "A", "tags": ["python", "web"], "content": "A"})
+    client.post("/api/notes", json={"title": "B", "tags": ["python", "fastapi"], "content": "B"})
 
     resp = client.get("/api/tags")
     assert resp.status_code == 200

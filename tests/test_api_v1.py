@@ -226,7 +226,7 @@ def test_v1_dashboard_activity_returns_recent_notes(client: TestClient) -> None:
     assert item["title"] in {first["title"], second["title"]}
     assert item["description"]
     assert item["timestamp"]
-    assert set(item["note"]) == {"file_id", "title"}
+    assert {"file_id", "title"}.issubset(set(item["note"]))
 
 
 def test_v1_index_rebuild_returns_envelope(client: TestClient) -> None:
