@@ -70,8 +70,6 @@ def _build_frontmatter_yaml(note: Note) -> str:
         data["attachments"] = note.attachments
     if note.status != "published":
         data["status"] = note.status
-    if note.entry_type:
-        data["type"] = note.entry_type
     if note.source_project:
         data["source_project"] = note.source_project
     if note.source_path:
