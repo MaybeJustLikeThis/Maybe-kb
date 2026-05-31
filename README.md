@@ -54,7 +54,7 @@ KB_SKIP_WATCH=1 KB_BACKEND_PORT=8420 ./scripts/start.sh
 - **笔记详情**：阅读 / 编辑双模式切换，相关笔记推荐
 - **路径安全**：所有文件操作统一防穿越
 - **多设备同步**：Markdown 文件通过 Git 同步，索引每台设备独立生成
-- **Hexo 自动同步**：配置 `watch_dir` 后，`kb serve` 启动即同步博客文章，持续监听变更
+- **Hexo 自动同步**：`kb index --full` / `kb serve` 自动同步 Hexo `_posts/` 目录下的 Markdown 文章及关联图片资源文件夹，`kb serve` 持续监听变更
 - **相关笔记推荐**：笔记详情页底部展示语义相似的其他笔记
 - **评测体系**：`kb eval` 命令运行搜索评测，支持评分（命中率/MRR/关键词/LLM 裁判）、基线对比、难度分类筛选
 
@@ -160,6 +160,17 @@ kb/
     └── test_watcher.py
 ```
 
+## 与 Hexo 博客集成
+
+kb 配置 `watch_dir` 指向 Hexo 博客的 `source/_posts/` 后：
+
+- `kb index --full` 或 `kb serve` 启动时将博客文章同步到 kb vault
+- **图片资源文件夹**（Hexo asset folder）同步拷贝，Web UI 中图片可正常显示
+- `kb serve` 持续监听博客目录变更，自动增量索引
+- 通过 MCP Server，Claude Code 可以直接搜索、阅读、问答博客内容
+
+**Markdown 图片路径建议**：使用 `![](文章名/图片名.webp)` 格式，兼容 Typora / VS Code / Hexo / kb 所有环境；避免裸文件名 `![](图片名.webp)`，该格式仅 Hexo `postAsset: true` 支持。
+
 ## 技术栈
 
 | 层 | 技术 | 用途 |
@@ -234,6 +245,7 @@ top_k = 5
 host = "127.0.0.1"
 port = 8420
 # 配置 Hexo 博客源目录，kb serve 启动时自动同步
+# 同步内容包括 Markdown 文章 + 同名资源文件夹（图片等）
 watch_dir = "C:/Users/cherry/Desktop/项目/blog_new/blog_new/source/_posts"
 
 # 知识类型定义（Dashboard 类型分布 + 搜索过滤）
