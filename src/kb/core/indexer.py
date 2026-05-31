@@ -1,13 +1,17 @@
-"""Index orchestration — file discovery, sync, chunking, embedding, vector upsert."""
+"""Index orchestration: file discovery, sync, chunking, embedding, vector upsert."""
 from __future__ import annotations
 
 import logging
+import re
+import shutil
 from pathlib import Path
 
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
 from kb.data.storage import chunk_text, discover_notes, parse_markdown_file, _compute_hash as compute_file_hash
 from kb.data.vector import VectorRecord, VectorStore
+
+_RELATIVE_IMAGE_BARE = re.compile(r'(!\[[^\]]*\]\()(?!https?://|/|data:)([^/)]+\))')
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +59,20 @@ def index_files(
                     if second_delim != -1:
                         fm = src_content[first_delim+3:second_delim].rstrip()
                         src_content = src_content[:first_delim+3] + "\n" + fm + f"\nsource_project: {source_project}\n" + src_content[second_delim:]
+                # Rewrite bare image references (no directory prefix) to use Hexo asset folder convention
+                stem = f.stem
+                src_content = _RELATIVE_IMAGE_BARE.sub(
+                    lambda m, s=stem: f"{m.group(1)}{s}/{m.group(2)}", src_content
+                )
                 if not dest.exists() or dest.read_text(encoding="utf-8") != src_content:
                     dest.write_text(src_content, encoding="utf-8")
+                # Copy associated asset directory (Hexo asset folder convention)
+                asset_dir = f.parent / stem
+                if asset_dir.is_dir():
+                    dest_asset = category_dir / stem
+                    if dest_asset.exists():
+                        shutil.rmtree(dest_asset)
+                    shutil.copytree(asset_dir, dest_asset)
 
     all_hashes = db.get_all_hashes()
     existing = {} if full else all_hashes

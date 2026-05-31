@@ -41,6 +41,10 @@ def create_app(kb_config: KBConfig) -> FastAPI:
     v1_router = create_v1_router(ctx)
     app.include_router(v1_router, prefix="/api/v1")
 
+    # Serve vault files (notes, attachments) for image/asset resolution
+    vault_path = kb_config.vault_path
+    app.mount("/vault", StaticFiles(directory=str(vault_path)), name="vault")
+
     # Serve frontend static files (production mode — built files in web/dist/)
     static_dir = Path(__file__).parent.parent.parent / "web" / "dist"
     if static_dir.exists() and (static_dir / "assets").exists():
@@ -49,7 +53,7 @@ def create_app(kb_config: KBConfig) -> FastAPI:
         @app.get("/{full_path:path}")
         async def serve_frontend(full_path: str):
             """Serve frontend SPA — fallback to index.html for client-side routing."""
-            if full_path.startswith("api"):
+            if full_path.startswith("api") or full_path.startswith("vault"):
                 raise HTTPException(status_code=404)
             file_path = _resolve_static_path(static_dir, full_path)
             if file_path.is_file():

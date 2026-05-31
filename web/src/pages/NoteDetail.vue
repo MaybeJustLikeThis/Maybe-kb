@@ -43,7 +43,7 @@
             <input v-model="tagsInput" class="input mt-1" placeholder="e.g. python, web" />
           </div>
         </div>
-        <MarkdownEditor v-model="content" />
+        <MarkdownEditor v-model="content" :note-dir="noteDir" />
       </template>
 
       <!-- Related Notes -->
@@ -90,6 +90,11 @@ const props = defineProps<{ name?: string; fileId?: string }>()
 const router = useRouter()
 
 const isNew = computed(() => !props.fileId || props.fileId === 'new')
+const noteDir = computed(() => {
+  if (!props.fileId) return ''
+  const idx = props.fileId.lastIndexOf('/')
+  return idx >= 0 ? props.fileId.substring(0, idx + 1) : ''
+})
 
 const title = ref('')
 const content = ref('')
@@ -117,7 +122,17 @@ const marked = new Marked(
 
 const renderedContent = computed(() => {
   const raw = marked.parse(content.value || '', { async: false }) as string
-  return DOMPurify.sanitize(raw)
+  let html = DOMPurify.sanitize(raw)
+  // Resolve relative image src to /vault/ absolute paths
+  if (props.fileId) {
+    const noteDir = props.fileId.substring(0, props.fileId.lastIndexOf('/') + 1)
+    html = html.replace(
+      /(<img\s[^>]*\bsrc=")((?!https?:\/\/|\/|data:)[^"]+)(")/gi,
+      (_m: string, prefix: string, src: string, suffix: string) =>
+        `${prefix}/vault/${noteDir}${src}${suffix}`,
+    )
+  }
+  return html
 })
 
 function syncTopBar() {

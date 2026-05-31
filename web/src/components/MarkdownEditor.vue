@@ -31,6 +31,7 @@ import 'highlight.js/styles/github-dark.min.css'
 
 const props = defineProps<{
   modelValue: string
+  noteDir?: string
 }>()
 
 defineEmits<{
@@ -54,7 +55,15 @@ const marked = new Marked(
 
 const renderedHtml = computed(() => {
   const raw = marked.parse(props.modelValue || '', { async: false }) as string
-  return DOMPurify.sanitize(raw)
+  let html = DOMPurify.sanitize(raw)
+  if (props.noteDir) {
+    html = html.replace(
+      /(<img\s[^>]*\bsrc=")((?!https?:\/\/|\/|data:)[^"]+)(")/gi,
+      (_m: string, prefix: string, src: string, suffix: string) =>
+        `${prefix}/vault/${props.noteDir}${src}${suffix}`,
+    )
+  }
+  return html
 })
 </script>
 

@@ -190,8 +190,19 @@ def index(
 ):
     """Build or update the search index."""
     vault = Path.cwd()
+    config = load_config(vault)
     ctx = _get_context(with_embedding=True)
-    fts5_count, vec_count = index_files(vault, ctx.db, full=full, embedding_provider=ctx.embedding)
+
+    external_sources = None
+    if config.server.watch_dir:
+        watch_path = Path(config.server.watch_dir).expanduser().resolve()
+        if watch_path.is_dir():
+            external_sources = [watch_path]
+
+    fts5_count, vec_count = index_files(
+        vault, ctx.db, full=full, embedding_provider=ctx.embedding,
+        external_sources=external_sources, source_project="blog",
+    )
     ctx.close()
 
     mode = "full rebuild" if full else "incremental update"
