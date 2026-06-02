@@ -1,16 +1,19 @@
 """Tests for MCP kb_save tool."""
-import os
-import pytest
 import anyio
+import pytest
 from pathlib import Path
 from kb.core.config import KBConfig, EmbeddingConfig, LLMConfig, SearchConfig, RAGConfig, ServerConfig
 
 
-def test_kb_save_creates_note(tmp_path: Path):
-    """kb_save creates a note with source_project."""
-    os.chdir(tmp_path)
+def _prepare_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
     (tmp_path / "notes").mkdir()
     (tmp_path / ".kb").mkdir()
+
+
+def test_kb_save_creates_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """kb_save creates a note with source_project."""
+    _prepare_vault(tmp_path, monkeypatch)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),
@@ -25,10 +28,10 @@ def test_kb_save_creates_note(tmp_path: Path):
 
     async def _run():
         result = await mcp.call_tool("kb_save", {
-            "title": "架构选型",
-            "content": "# 选型\n\n选择 LanceDB",
+            "title": "Architecture Choice",
+            "content": "# Architecture Choice\n\nChoose LanceDB",
             "source_project": "agent",
-            "source_context": "实现搜索功能",
+            "source_context": "implement search",
             "tags": "vector-db, search",
         })
         assert result is not None
@@ -40,11 +43,9 @@ def test_kb_save_creates_note(tmp_path: Path):
     anyio.run(_run)
 
 
-def test_kb_save_requires_source_project(tmp_path: Path):
+def test_kb_save_requires_source_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """kb_save requires source_project (FastMCP enforces non-default str params)."""
-    os.chdir(tmp_path)
-    (tmp_path / "notes").mkdir()
-    (tmp_path / ".kb").mkdir()
+    _prepare_vault(tmp_path, monkeypatch)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),
@@ -59,8 +60,8 @@ def test_kb_save_requires_source_project(tmp_path: Path):
 
     async def _run():
         result = await mcp.call_tool("kb_save", {
-            "title": "Rust 入门",
-            "content": "# Rust\n\n快速入门",
+            "title": "Rust Intro",
+            "content": "# Rust\n\nSimple note content.",
             "source_project": "manual",
         })
         assert result is not None
@@ -68,11 +69,9 @@ def test_kb_save_requires_source_project(tmp_path: Path):
     anyio.run(_run)
 
 
-def test_kb_save_content_preserved(tmp_path: Path):
+def test_kb_save_content_preserved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """kb_save preserves code blocks on disk."""
-    os.chdir(tmp_path)
-    (tmp_path / "notes").mkdir()
-    (tmp_path / ".kb").mkdir()
+    _prepare_vault(tmp_path, monkeypatch)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),
@@ -88,7 +87,7 @@ def test_kb_save_content_preserved(tmp_path: Path):
     async def _run():
         code = "```python\ndef hello():\n    print('hi')\n```"
         result = await mcp.call_tool("kb_save", {
-            "title": "hello 函数",
+            "title": "hello function",
             "content": code,
             "source_project": "blog",
         })
@@ -122,11 +121,9 @@ def test_kb_save_tool_registered(tmp_path: Path):
     assert "kb_save" in tool_names
 
 
-def test_kb_add_has_source_project(tmp_path: Path):
+def test_kb_add_has_source_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """kb_add accepts and stores source_project."""
-    os.chdir(tmp_path)
-    (tmp_path / "notes").mkdir()
-    (tmp_path / ".kb").mkdir()
+    _prepare_vault(tmp_path, monkeypatch)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),
@@ -158,11 +155,9 @@ def test_kb_add_has_source_project(tmp_path: Path):
     anyio.run(_run)
 
 
-def test_kb_add_rejects_empty_title(tmp_path: Path):
+def test_kb_add_rejects_empty_title(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """kb_add returns error dict for empty title."""
-    os.chdir(tmp_path)
-    (tmp_path / "notes").mkdir()
-    (tmp_path / ".kb").mkdir()
+    _prepare_vault(tmp_path, monkeypatch)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),

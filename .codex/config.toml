@@ -1,0 +1,7 @@
+[mcp_servers.kb]
+args = [
+    "mcp",
+    "--path",
+    ".",
+]
+command = "kb"
