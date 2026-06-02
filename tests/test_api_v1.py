@@ -267,6 +267,57 @@ def test_v1_index_rebuild_returns_envelope(client: TestClient) -> None:
     assert "vectors" in body["data"]
 
 
+def test_v1_create_note_updates_vector_index(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Creating a note attempts single-note vector indexing when embedding exists."""
+    calls: list[str] = []
+
+    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
+        calls.append(file_id)
+        return 1
+
+    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+
+    response = client.post("/api/v1/notes", json={
+        "title": "Vector Indexed",
+        "content": "This body should be indexed.",
+        "source_project": "manual",
+    })
+
+    assert response.status_code == 200
+    note = response.json()["data"]
+    assert calls == [note["file_id"]]
+
+
+def test_v1_update_note_updates_vector_index(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Updating a note attempts single-note vector indexing when embedding exists."""
+    calls: list[str] = []
+
+    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
+        calls.append(file_id)
+        return 1
+
+    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+
+    created = client.post("/api/v1/notes", json={
+        "title": "Update Vector Indexed",
+        "content": "Original body",
+    }).json()["data"]
+    calls.clear()
+
+    response = client.put(f"/api/v1/notes/{created['file_id']}", json={
+        "content": "Updated body",
+    })
+
+    assert response.status_code == 200
+    assert calls == [created["file_id"]]
+
+
 def test_v1_attachment_upload_returns_envelope(client: TestClient) -> None:
     """Attachment upload returns the stored relative path in the v1 envelope."""
     from io import BytesIO

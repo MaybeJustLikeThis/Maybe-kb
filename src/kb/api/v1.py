@@ -11,7 +11,7 @@ from kb.api import responses
 from kb.api.schemas import ChatRequest, NoteCreateRequest, NoteUpdateRequest
 from kb.core import queries, services
 from kb.core.context import AppContext
-from kb.core.indexer import index_files
+from kb.core.indexer import index_files, index_note_vectors
 from kb.core.rag import rag_query, rag_query_stream
 from kb.core.serializers import note_to_detail
 from kb.data.attachments import store_attachment
@@ -28,6 +28,17 @@ def _not_found_or_path_error(exc: Exception):
 def create_v1_router(ctx: AppContext) -> APIRouter:
     """Create the normalized v1 API router."""
     router = APIRouter()
+
+    def _index_note_if_possible(file_id: str) -> int:
+        if ctx.embedding is None:
+            return 0
+        return index_note_vectors(
+            ctx.vault,
+            ctx.db,
+            ctx.embedding,
+            file_id,
+            vector_store=ctx.vector_store,
+        )
 
     @router.get("/notes")
     def list_notes(
@@ -72,6 +83,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 ),
                 ctx.vault, ctx.db,
             )
+            _index_note_if_possible(note.file_id)
         except ValueError:
             return responses.path_traversal_blocked()
         return responses.ok(note_to_detail(note))
@@ -99,6 +111,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
         }
         try:
             note = services.update_note(ctx.vault, ctx.db, file_id, **fields)
+            _index_note_if_possible(note.file_id)
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
         return responses.ok(note_to_detail(note))
