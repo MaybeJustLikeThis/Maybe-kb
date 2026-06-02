@@ -123,6 +123,39 @@ def test_ingest_request_defaults():
     assert req.source_context is None
 
 
+def test_ingest_request_metadata_defaults():
+    """Import-related metadata defaults are safe empty values."""
+    req = IngestRequest(title="T", content="C", source_project="upload")
+
+    assert req.source_path is None
+    assert req.content_type == "markdown"
+    assert req.attachments == []
+    assert req.extra_frontmatter == {}
+
+
+def test_ingest_request_accepts_import_metadata():
+    """IngestRequest carries source and parser metadata end to end."""
+    req = IngestRequest(
+        title="Imported PDF",
+        content="Converted markdown",
+        source_project="upload",
+        source_path="attachments/2026/06/abc123.pdf",
+        content_type="pdf",
+        attachments=["attachments/2026/06/abc123.pdf"],
+        extra_frontmatter={
+            "parser": {
+                "name": "markitdown",
+                "status": "success",
+            },
+        },
+    )
+
+    assert req.source_path == "attachments/2026/06/abc123.pdf"
+    assert req.content_type == "pdf"
+    assert req.attachments == ["attachments/2026/06/abc123.pdf"]
+    assert req.extra_frontmatter["parser"]["name"] == "markitdown"
+
+
 def test_ingest_request_is_frozen():
     """IngestRequest is immutable."""
     req = IngestRequest(title="T", content="C", source_project="blog")

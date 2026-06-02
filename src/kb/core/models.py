@@ -134,3 +134,7 @@ class IngestRequest:
     category: str | None = None
     description: str | None = None
     source_context: str | None = None
+    source_path: str | None = None
+    content_type: str = "markdown"
+    attachments: list[str] = field(default_factory=list)
+    extra_frontmatter: dict[str, Any] = field(default_factory=dict)

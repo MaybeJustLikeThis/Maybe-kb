@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from kb.core.models import Note
 from kb.data.storage import (
@@ -62,6 +63,8 @@ def create_note(
     source_path: str | None = None,
     source_context: str | None = None,
     content_type: str = "markdown",
+    attachments: list[str] | None = None,
+    extra_frontmatter: dict[str, Any] | None = None,
 ) -> Note:
     """Create a new note — slug generation, collision avoidance, file write, DB insert.
 
@@ -96,6 +99,8 @@ def create_note(
         source_path=source_path,
         source_context=source_context,
         content_type=content_type,
+        attachments=list(attachments) if attachments else [],
+        extra_frontmatter=dict(extra_frontmatter) if extra_frontmatter else {},
     )
 
     write_markdown_file(full_path, note)

@@ -41,5 +41,9 @@ def ingest(
         tags=tags,
         description=request.description,
         source_project=request.source_project,
+        source_path=request.source_path,
         source_context=request.source_context,
+        content_type=request.content_type,
+        attachments=request.attachments,
+        extra_frontmatter=request.extra_frontmatter,
     )

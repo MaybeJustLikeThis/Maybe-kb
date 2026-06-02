@@ -200,6 +200,16 @@ class Database:
         ).fetchall()
         return [r["tag"] for r in rows]
 
+    def get_attachments(self, file_id: str) -> list[str]:
+        """Get attachment paths for a note."""
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT attachment_path FROM note_attachments WHERE note_id = ? "
+            "ORDER BY attachment_path",
+            (file_id,),
+        ).fetchall()
+        return [r["attachment_path"] for r in rows]
+
     def list_notes(
         self,
         category: str | None = None,

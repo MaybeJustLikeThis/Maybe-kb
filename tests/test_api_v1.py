@@ -120,6 +120,32 @@ def test_v1_create_get_update_delete_note(client: TestClient) -> None:
     assert_error_envelope(missing_resp.json(), "NOTE_NOT_FOUND")
 
 
+def test_v1_create_note_preserves_import_metadata(client: TestClient) -> None:
+    """POST /api/v1/notes preserves source_path and content_type."""
+    response = client.post("/api/v1/notes", json={
+        "title": "Imported API PDF",
+        "content": "Converted body",
+        "category": "document",
+        "source_project": "upload",
+        "source_path": "attachments/2026/06/api.pdf",
+        "source_context": "api upload",
+        "content_type": "pdf",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    note = body["data"]
+    assert note["source_project"] == "upload"
+    assert note["source_path"] == "attachments/2026/06/api.pdf"
+    assert note["source_context"] == "api upload"
+    assert note["content_type"] == "pdf"
+
+    detail = client.get(f"/api/v1/notes/{note['file_id']}").json()["data"]
+    assert detail["source_path"] == "attachments/2026/06/api.pdf"
+    assert detail["content_type"] == "pdf"
+
+
 def test_v1_path_traversal_returns_error_envelope(client: TestClient) -> None:
     """Path traversal attempts return the v1 error envelope."""
     response = client.get("/api/v1/notes/%2e%2e%2foutside")

@@ -97,7 +97,9 @@ def create_api_router(ctx: AppContext) -> APIRouter:
                     tags=body.tags,
                     category=body.category,
                     description=body.description,
+                    source_path=body.source_path,
                     source_context=body.source_context,
+                    content_type=body.content_type,
                 ),
                 vault_path, ctx.db,
             )

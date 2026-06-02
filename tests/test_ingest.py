@@ -97,6 +97,48 @@ def test_ingest_merges_auto_tags(tmp_path: Path, db: Database):
     assert note.tags.count("python") == 1
 
 
+def test_ingest_persists_import_metadata(tmp_path: Path, db: Database):
+    """ingest() writes source, content type, attachments, and parser metadata."""
+    req = IngestRequest(
+        title="Imported PDF",
+        content="# Imported PDF\n\nConverted body",
+        source_project="upload",
+        source_path="attachments/2026/06/abc123.pdf",
+        source_context="user upload",
+        content_type="pdf",
+        attachments=["attachments/2026/06/abc123.pdf"],
+        extra_frontmatter={
+            "parser": {
+                "name": "markitdown",
+                "status": "success",
+            },
+        },
+        category="document",
+        tags=["imported"],
+    )
+
+    note = ingest(req, tmp_path, db)
+
+    assert note.source_path == "attachments/2026/06/abc123.pdf"
+    assert note.source_context == "user upload"
+    assert note.content_type == "pdf"
+    assert note.attachments == ["attachments/2026/06/abc123.pdf"]
+    assert note.extra_frontmatter["parser"]["name"] == "markitdown"
+
+    row = db.get_note(note.file_id)
+    assert row is not None
+    assert row["source_path"] == "attachments/2026/06/abc123.pdf"
+    assert row["content_type"] == "pdf"
+    assert db.get_attachments(note.file_id) == ["attachments/2026/06/abc123.pdf"]
+
+    text = (tmp_path / note.file_id).read_text(encoding="utf-8")
+    assert "source_path: attachments/2026/06/abc123.pdf" in text
+    assert "content_type: pdf" in text
+    assert "attachments:" in text
+    assert "parser:" in text
+    assert "name: markitdown" in text
+
+
 def test_ingest_rejects_empty_title(tmp_path: Path, db: Database):
     """Empty title raises ValueError."""
     req = IngestRequest(title="  ", content="x", source_project="manual")
