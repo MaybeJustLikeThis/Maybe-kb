@@ -17,4 +17,6 @@ eval/results/
 .playwright-mcp/
 web/screenshots/
 .claude/
-docs/
+!docs/
+docs/*
+!docs/claude-plugin.md

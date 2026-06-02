@@ -1,0 +1,17 @@
+{
+  "name": "maybe-kb",
+  "version": "0.1.0",
+  "description": "Claude Code plugin for the Maybe-kb local knowledge base MCP server.",
+  "author": {
+    "name": "MaybeJustLikeThis"
+  },
+  "repository": "https://github.com/MaybeJustLikeThis/Maybe-kb",
+  "keywords": [
+    "knowledge-base",
+    "mcp",
+    "rag",
+    "search",
+    "markdown"
+  ],
+  "license": "MIT"
+}
