@@ -332,8 +332,23 @@ def test_v1_attachment_upload_returns_envelope(client: TestClient) -> None:
     assert body["data"]["path"].startswith("attachments/")
 
 
-def test_v1_chat_without_providers_returns_error_envelope(client: TestClient) -> None:
+def test_v1_chat_without_providers_returns_error_envelope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Chat reports missing providers through the v1 error envelope."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "attachments").mkdir()
+    (tmp_path / ".kb").mkdir()
+    kb_config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        server=ServerConfig(host="127.0.0.1", port=8420),
+        embedding=None,
+        llm=None,
+    )
+    client = TestClient(create_app(kb_config))
+
     response = client.post("/api/v1/chat/ask", json={"query": "hello"})
 
     assert response.status_code == 400
