@@ -185,11 +185,14 @@ def test_mcp_tools_present():
             server=ServerConfig(),
         )
         mcp = create_mcp_server(config)
-        tool_names = [t.name for t in mcp._tool_manager._tools.values()]
-        assert "kb_search" in tool_names
-        assert "kb_semantic_search" in tool_names
-        assert "kb_hybrid_search" in tool_names
-        assert "kb_read" in tool_names
-        assert "kb_list" in tool_names
-        assert "kb_add" in tool_names
-        assert "kb_rag_query" in tool_names
+        try:
+            tool_names = [t.name for t in mcp._tool_manager._tools.values()]
+            assert "kb_search" in tool_names
+            assert "kb_semantic_search" in tool_names
+            assert "kb_hybrid_search" in tool_names
+            assert "kb_read" in tool_names
+            assert "kb_list" in tool_names
+            assert "kb_add" in tool_names
+            assert "kb_rag_query" in tool_names
+        finally:
+            mcp._kb_context.close()

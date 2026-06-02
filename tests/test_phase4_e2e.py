@@ -101,8 +101,8 @@ def test_cli_ask_with_mocked_llm(kb_project: Path, monkeypatch: pytest.MonkeyPat
         def dimension(self):
             return 512
 
-    monkeypatch.setattr("kb.data.llm.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.data.embedding.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
 
     result = runner.invoke(app, ["ask", "什么是 Python 异步？", "--top-k", "3"])
     assert result.exit_code == 0
@@ -136,8 +136,8 @@ def test_cli_ask_stream_with_mocked_llm(kb_project: Path, monkeypatch: pytest.Mo
         def dimension(self):
             return 512
 
-    monkeypatch.setattr("kb.data.llm.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.data.embedding.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
 
     result = runner.invoke(app, ["ask", "test", "--stream"])
     assert result.exit_code == 0
@@ -176,8 +176,8 @@ def test_api_chat_ask_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyPatc
         def dimension(self):
             return 512
 
-    monkeypatch.setattr("kb.routes.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.routes.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
 
     web_app = create_app(config)
     client = TestClient(web_app)
@@ -221,8 +221,8 @@ def test_api_chat_stream_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyP
         def dimension(self):
             return 512
 
-    monkeypatch.setattr("kb.routes.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.routes.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
 
     web_app = create_app(config)
     client = TestClient(web_app)
@@ -258,6 +258,7 @@ def test_api_chat_requires_llm_config(kb_project: Path):
     """Chat endpoints return 400 when no LLM config provided."""
     from kb.cli import app
     from kb.core.config import load_config
+    from kb.core.context import AppContext
     from kb.routes import create_api_router
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -265,18 +266,17 @@ def test_api_chat_requires_llm_config(kb_project: Path):
     runner.invoke(app, ["init"])
     config = load_config(kb_project)
 
-    router = create_api_router(
-        config.vault_path,
-        config.vault_path / ".kb" / "kb.db",
-        embedding_config=config.embedding,
-        llm_config=None,
-    )
+    ctx = AppContext.from_config(config, with_llm=False)
+    router = create_api_router(ctx)
     app_fastapi = FastAPI()
     app_fastapi.include_router(router, prefix="/api")
     client = TestClient(app_fastapi)
 
-    r = client.post("/api/chat/ask", json={"query": "test"})
-    assert r.status_code == 400
+    try:
+        r = client.post("/api/chat/ask", json={"query": "test"})
+        assert r.status_code == 400
+    finally:
+        ctx.close()
 
 
 # ── MCP RAG tool test ──────────────────────────────────────────────────
@@ -319,8 +319,8 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
         def dimension(self):
             return 512
 
-    monkeypatch.setattr("kb.mcp_server.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.mcp_server.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
 
     config = KBConfig(vault_path=Path("/tmp/mcp-rag-test"))
     server = create_mcp_server(config)
@@ -329,10 +329,13 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
         t for t in server._tool_manager._tools.values()
         if t.name == "kb_rag_query"
     )
-    result = tool.fn(query="What is Python?", top_k=3)
-    assert result["answer"] == "MCP answer"
-    assert result["model"] == "mock"
-    assert result["tokens_used"] == 5
+    try:
+        result = tool.fn(query="What is Python?", top_k=3)
+        assert result["answer"] == "MCP answer"
+        assert result["model"] == "mock"
+        assert result["tokens_used"] == 5
+    finally:
+        server._kb_context.close()
 
 
 # ── Format context integration tests ───────────────────────────────────
@@ -376,7 +379,7 @@ def test_search_result_to_context_roundtrip():
 
 def test_rag_query_orchestration_with_mocks(monkeypatch: pytest.MonkeyPatch):
     """Full rag_query orchestration with all providers mocked."""
-    from kb.core.rag import rag_query
+    from kb.core.rag import RAGResponse, rag_query
     from kb.data.database import Database
     from kb.data.llm import LLMResponse
     from kb.data.embedding import EmbeddingProvider, EmbeddingResult
@@ -413,9 +416,9 @@ def test_rag_query_orchestration_with_mocks(monkeypatch: pytest.MonkeyPatch):
                 pass
 
         response = rag_query("test query", db, MockEmbedding(), MockStore(), MockLLM(), top_k=3)
-        assert isinstance(response, LLMResponse)
+        assert isinstance(response, RAGResponse)
         assert response.text == "Generated answer"
         assert response.model == "mock"
+        assert response.sources == []
     finally:
         db.close()
-
