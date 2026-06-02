@@ -12,7 +12,7 @@ from kb.api.schemas import ChatRequest, NoteCreateRequest, NoteUpdateRequest
 from kb.core import queries, services
 from kb.core.context import AppContext
 from kb.core.indexer import index_files, index_note_vectors
-from kb.core.rag import rag_query, rag_query_stream
+from kb.core.rag import rag_query, rag_query_stream, rag_source_to_dict
 from kb.core.serializers import note_to_detail
 from kb.data.attachments import store_attachment
 
@@ -228,7 +228,10 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             "answer": response.text,
             "model": response.model,
             "tokens_used": response.tokens_used,
-            "sources": [],
+            "sources": [
+                rag_source_to_dict(source)
+                for source in response.sources
+            ],
         })
 
     @router.post("/chat/stream")

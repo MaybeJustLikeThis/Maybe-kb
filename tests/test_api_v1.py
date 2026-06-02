@@ -338,3 +338,40 @@ def test_v1_chat_without_providers_returns_error_envelope(client: TestClient) ->
 
     assert response.status_code == 400
     assert_error_envelope(response.json(), "PROVIDER_NOT_CONFIGURED")
+
+
+def test_v1_chat_ask_returns_sources(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /api/v1/chat/ask returns RAG sources from rag_query."""
+    from kb.core.rag import RAGResponse, RAGSource
+
+    def fake_rag_query(query, db, embed_provider, store, llm, top_k=5):
+        return RAGResponse(
+            text="Answer",
+            tokens_used=7,
+            model="mock",
+            sources=[
+                RAGSource(
+                    file_id="notes/a.md",
+                    title="A",
+                    snippet="source snippet",
+                    source_project="upload",
+                    source_path="attachments/a.pdf",
+                    content_type="pdf",
+                    attachments=["attachments/a.pdf"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("kb.api.v1.rag_query", fake_rag_query)
+
+    response = client.post("/api/v1/chat/ask", json={"query": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    assert body["data"]["answer"] == "Answer"
+    assert body["data"]["sources"][0]["file_id"] == "notes/a.md"
+    assert body["data"]["sources"][0]["attachments"] == ["attachments/a.pdf"]
