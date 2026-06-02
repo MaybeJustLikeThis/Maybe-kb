@@ -264,6 +264,85 @@ def test_index_files_external_sources(db: Database, tmp_path: Path):
     assert row["title"] == "External"
 
 
+def test_index_files_external_sources_collects_relative_images(
+    db: Database,
+    tmp_path: Path,
+):
+    """External source sync stores local images and persists note attachments."""
+    vault = tmp_path
+    external = tmp_path / "blog"
+    posts = external / "posts"
+    posts.mkdir(parents=True)
+    (posts / "diagram.png").write_bytes(b"diagram")
+    (posts / "post.md").write_text(
+        "---\n"
+        "title: External Images\n"
+        "categories: docs\n"
+        "---\n\n"
+        "Body\n\n"
+        "![Diagram](./diagram.png)\n",
+        encoding="utf-8",
+    )
+
+    db.initialize()
+
+    indexed, _ = index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        source_project="blog",
+    )
+
+    assert indexed == 1
+    dest = vault / "notes" / "docs" / "post.md"
+    text = dest.read_text(encoding="utf-8")
+    assert "source_project: blog" in text
+    assert "attachments:" in text
+    assert "attachments/" in text
+    assert "![Diagram](attachments/" in text
+
+    row = db.get_note("notes/docs/post.md")
+    assert row is not None
+    assert row["source_project"] == "blog"
+    attachments = db.get_attachments("notes/docs/post.md")
+    assert len(attachments) == 1
+    assert attachments[0].startswith("attachments/")
+    assert (vault / attachments[0]).read_bytes() == b"diagram"
+
+
+def test_index_files_external_sources_collects_hexo_asset_folder(
+    tmp_path: Path,
+):
+    """Bare image links resolve from the Hexo same-stem asset folder."""
+    vault = tmp_path / "vault"
+    external = tmp_path / "blog"
+    posts = external / "source" / "_posts"
+    asset_dir = posts / "hexo-post"
+    asset_dir.mkdir(parents=True)
+    (asset_dir / "cover.png").write_bytes(b"cover")
+    (posts / "hexo-post.md").write_text(
+        "---\n"
+        "title: Hexo Post\n"
+        "categories: blog\n"
+        "---\n\n"
+        "![Cover](cover.png)\n",
+        encoding="utf-8",
+    )
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    index_files(vault, db, full=True, external_sources=[external])
+
+    dest = vault / "notes" / "blog" / "hexo-post.md"
+    text = dest.read_text(encoding="utf-8")
+    assert "![Cover](attachments/" in text
+    assert not (vault / "notes" / "blog" / "hexo-post").exists()
+    attachments = db.get_attachments("notes/blog/hexo-post.md")
+    assert len(attachments) == 1
+    assert attachments[0].startswith("attachments/")
+
+
 def test_index_vectors_empty_changed_ids(db: Database, tmp_path: Path):
     """index_vectors with empty set() should return 0."""
     pytest.importorskip("sentence_transformers")

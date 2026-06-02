@@ -2,18 +2,61 @@
 from __future__ import annotations
 
 import logging
-import re
-import shutil
 from pathlib import Path
+from typing import Any
 
+import yaml
+
+from kb.core.markdown_assets import collect_markdown_image_assets
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
-from kb.data.storage import chunk_text, discover_notes, parse_markdown_file, _compute_hash as compute_file_hash
+from kb.data.storage import (
+    _compute_hash as compute_file_hash,
+    _split_frontmatter,
+    chunk_text,
+    discover_notes,
+    parse_markdown_file,
+)
 from kb.data.vector import VectorRecord, VectorStore
 
-_RELATIVE_IMAGE_BARE = re.compile(r'(!\[[^\]]*\]\()(?!https?://|/|data:)([^/)]+\))')
-
 logger = logging.getLogger(__name__)
+
+
+def _merge_external_frontmatter(
+    markdown: str,
+    *,
+    source_project: str | None,
+    attachments: list[str],
+) -> str:
+    frontmatter, body = _split_frontmatter(markdown)
+    data: dict[str, Any] = dict(frontmatter)
+    changed = False
+
+    if source_project and not data.get("source_project"):
+        data["source_project"] = source_project
+        changed = True
+
+    existing = data.get("attachments") or []
+    if isinstance(existing, str):
+        existing = [existing]
+    merged_attachments = list(existing)
+    for path in attachments:
+        if path not in merged_attachments:
+            merged_attachments.append(path)
+            changed = True
+    if merged_attachments:
+        data["attachments"] = merged_attachments
+
+    if not changed:
+        return markdown
+
+    raw = yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    ).strip()
+    return f"---\n{raw}\n---\n\n{body.lstrip()}"
 
 
 def index_files(
@@ -52,27 +95,21 @@ def index_files(
                     if existing.resolve() != dest.resolve():
                         existing.unlink()
                 src_content = f.read_text(encoding="utf-8")
-                # Inject source_project into frontmatter if missing
-                if source_project and "source_project:" not in src_content:
-                    first_delim = src_content.find("---", 0)
-                    second_delim = src_content.find("---", first_delim + 3) if first_delim != -1 else -1
-                    if second_delim != -1:
-                        fm = src_content[first_delim+3:second_delim].rstrip()
-                        src_content = src_content[:first_delim+3] + "\n" + fm + f"\nsource_project: {source_project}\n" + src_content[second_delim:]
-                # Rewrite bare image references (no directory prefix) to use Hexo asset folder convention
-                stem = f.stem
-                src_content = _RELATIVE_IMAGE_BARE.sub(
-                    lambda m, s=stem: f"{m.group(1)}{s}/{m.group(2)}", src_content
+                collected = collect_markdown_image_assets(
+                    src_content,
+                    source_file=f,
+                    source_root=src_dir,
+                    vault=vault,
                 )
+                src_content = _merge_external_frontmatter(
+                    collected.content,
+                    source_project=source_project,
+                    attachments=collected.attachments,
+                )
+                for warning in collected.warnings:
+                    logger.warning("Image asset warning for %s: %s", f, warning)
                 if not dest.exists() or dest.read_text(encoding="utf-8") != src_content:
                     dest.write_text(src_content, encoding="utf-8")
-                # Copy associated asset directory (Hexo asset folder convention)
-                asset_dir = f.parent / stem
-                if asset_dir.is_dir():
-                    dest_asset = category_dir / stem
-                    if dest_asset.exists():
-                        shutil.rmtree(dest_asset)
-                    shutil.copytree(asset_dir, dest_asset)
 
     all_hashes = db.get_all_hashes()
     existing = {} if full else all_hashes
