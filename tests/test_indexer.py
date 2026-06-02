@@ -2,8 +2,47 @@
 import pytest
 from pathlib import Path
 from kb.data.database import Database
+from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+from kb.data.vector import VectorRecord
 from kb.core.models import Note
 from kb.core.indexer import index_files, index_vectors
+
+
+class FakeEmbeddingProvider(EmbeddingProvider):
+    """Deterministic embedding provider for indexer tests."""
+
+    def embed(self, text: str) -> EmbeddingResult:
+        return EmbeddingResult(
+            vector=[float(len(text)), 1.0, 0.0],
+            dimension=3,
+            tokens_used=len(text),
+        )
+
+    def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+        return [self.embed(text) for text in texts]
+
+    @property
+    def dimension(self) -> int:
+        return 3
+
+
+class FakeVectorStore:
+    """In-memory stand-in for VectorStore."""
+
+    def __init__(self) -> None:
+        self.records: dict[str, list[VectorRecord]] = {}
+        self.deleted: list[str] = []
+        self.closed = False
+
+    def upsert_chunks(self, file_id: str, chunks: list[VectorRecord]) -> None:
+        self.records[file_id] = list(chunks)
+
+    def delete_note(self, file_id: str) -> None:
+        self.deleted.append(file_id)
+        self.records.pop(file_id, None)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 @pytest.fixture
@@ -236,6 +275,84 @@ def test_index_vectors_empty_changed_ids(db: Database, tmp_path: Path):
     provider = LocalEmbeddingProvider()
     count = index_vectors(vault, db, provider, set())
     assert count == 0
+
+
+def test_index_note_vectors_upserts_single_note(db: Database, tmp_path: Path):
+    """index_note_vectors embeds one DB note and upserts its chunks."""
+    from kb.core.indexer import index_note_vectors
+
+    db.initialize()
+    db.upsert_note(Note(
+        file_id="notes/a.md",
+        title="A",
+        content="first paragraph\n\nsecond paragraph",
+    ))
+    store = FakeVectorStore()
+
+    count = index_note_vectors(
+        tmp_path,
+        db,
+        FakeEmbeddingProvider(),
+        "notes/a.md",
+        vector_store=store,
+    )
+
+    assert count >= 1
+    assert "notes/a.md" in store.records
+    assert store.records["notes/a.md"][0].id == "notes/a.md"
+    assert store.records["notes/a.md"][0].text
+    assert store.closed is False
+
+
+def test_index_note_vectors_deletes_missing_note(db: Database, tmp_path: Path):
+    """Missing DB rows delete stale vector chunks for that note."""
+    from kb.core.indexer import index_note_vectors
+
+    db.initialize()
+    store = FakeVectorStore()
+    store.records["notes/missing.md"] = [
+        VectorRecord(
+            id="notes/missing.md",
+            chunk_id=0,
+            vector=[1.0],
+            text="old",
+        )
+    ]
+
+    count = index_note_vectors(
+        tmp_path,
+        db,
+        FakeEmbeddingProvider(),
+        "notes/missing.md",
+        vector_store=store,
+    )
+
+    assert count == 0
+    assert "notes/missing.md" in store.deleted
+    assert "notes/missing.md" not in store.records
+
+
+def test_index_note_vectors_deletes_empty_content(db: Database, tmp_path: Path):
+    """Empty note content removes vector chunks instead of leaving stale records."""
+    from kb.core.indexer import index_note_vectors
+
+    db.initialize()
+    db.upsert_note(Note(file_id="notes/empty.md", title="Empty", content=""))
+    store = FakeVectorStore()
+    store.records["notes/empty.md"] = [
+        VectorRecord(id="notes/empty.md", chunk_id=0, vector=[1.0], text="old")
+    ]
+
+    count = index_note_vectors(
+        tmp_path,
+        db,
+        FakeEmbeddingProvider(),
+        "notes/empty.md",
+        vector_store=store,
+    )
+
+    assert count == 0
+    assert "notes/empty.md" in store.deleted
 
 
 def test_index_files_full_removes_missing(db: Database, tmp_path: Path):

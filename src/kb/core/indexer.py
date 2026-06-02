@@ -123,6 +123,51 @@ def index_files(
     return indexed, vector_count
 
 
+def index_note_vectors(
+    vault: Path,
+    db: Database,
+    provider: EmbeddingProvider,
+    file_id: str,
+    *,
+    vector_store: VectorStore | None = None,
+) -> int:
+    """Generate embeddings for one note and upsert LanceDB chunks.
+
+    If the note no longer exists or has empty content, stale vector chunks
+    are deleted and 0 is returned.
+    """
+    owns_store = vector_store is None
+    store = vector_store or VectorStore(vault / ".kb" / "vectors.lance")
+
+    try:
+        row = db.get_note(file_id)
+        if row is None:
+            store.delete_note(file_id)
+            return 0
+
+        content = row["content"] or ""
+        chunks = chunk_text(content)
+        if not chunks:
+            store.delete_note(file_id)
+            return 0
+
+        embed_results = provider.embed_batch(chunks)
+        records = [
+            VectorRecord(
+                id=file_id,
+                chunk_id=i,
+                vector=result.vector,
+                text=chunks[i],
+            )
+            for i, result in enumerate(embed_results)
+        ]
+        store.upsert_chunks(file_id, records)
+        return len(records)
+    finally:
+        if owns_store:
+            store.close()
+
+
 def index_vectors(
     vault: Path,
     db: Database,
@@ -139,26 +184,13 @@ def index_vectors(
 
     try:
         for file_id in changed_ids:
-            row = db.get_note(file_id)
-            if row is None:
-                store.delete_note(file_id)
-                continue
-            content = row["content"]
-            if not content:
-                continue
-            chunks = chunk_text(content)
-            embed_results = provider.embed_batch(chunks)
-            records = [
-                VectorRecord(
-                    id=file_id,
-                    chunk_id=i,
-                    vector=r.vector,
-                    text=chunks[i],
-                )
-                for i, r in enumerate(embed_results)
-            ]
-            store.upsert_chunks(file_id, records)
-            indexed += len(records)
+            indexed += index_note_vectors(
+                vault,
+                db,
+                provider,
+                file_id,
+                vector_store=store,
+            )
     finally:
         store.close()
 
