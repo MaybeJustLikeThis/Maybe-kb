@@ -24,7 +24,18 @@ kb init
 
 ## Local Plugin Development
 
-From Claude Code, add this repository as a local plugin directory, then enable the `maybe-kb` plugin.
+From Claude Code, add this repository as a local marketplace, then install the `maybe-kb` plugin:
+
+```bash
+claude plugin marketplace add ./
+claude plugin install maybe-kb@maybe-kb --scope project
+```
+
+For a one-off session without installing the plugin:
+
+```bash
+claude --plugin-dir .
+```
 
 The MCP configuration included in this repository starts:
 

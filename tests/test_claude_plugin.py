@@ -19,6 +19,19 @@ def test_claude_plugin_manifest_declares_kb_plugin() -> None:
     assert manifest["repository"].endswith("MaybeJustLikeThis/Maybe-kb")
 
 
+def test_claude_plugin_marketplace_exposes_local_plugin() -> None:
+    marketplace_path = ROOT / ".claude-plugin" / "marketplace.json"
+
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+
+    assert marketplace["name"] == "maybe-kb"
+    assert "Claude Code" in marketplace["description"]
+    assert marketplace["owner"]["name"] == "MaybeJustLikeThis"
+    plugin = marketplace["plugins"][0]
+    assert plugin["name"] == "maybe-kb"
+    assert plugin["source"] == "./"
+
+
 def test_claude_plugin_mcp_config_starts_kb_mcp() -> None:
     config = json.loads((ROOT / ".mcp.json").read_text(encoding="utf-8"))
 
