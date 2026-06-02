@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import posixpath
 import re
+from urllib.parse import unquote
 
 from kb.data.attachments import store_attachment
 
@@ -44,14 +46,18 @@ def collect_markdown_image_assets(
         target = parsed.group("target")
         title = parsed.group("title") or ""
 
-        if target.startswith(_IGNORED_PREFIXES):
+        if _is_ignored_target(target):
             return match.group(0)
 
-        if target.startswith("attachments/"):
-            _append_unique(attachments, target)
+        attachment_path = _normalize_attachment_path(target)
+        if attachment_path is not None:
+            if not attachment_path:
+                warnings.append(f"unsafe attachment path: {target}")
+            else:
+                _append_unique(attachments, attachment_path)
             return match.group(0)
 
-        resolved = _resolve_image(target, source_file, source_root, root)
+        resolved = _resolve_image(unquote(target), source_file, source_root, root)
         if resolved is None:
             warnings.append(f"missing image: {target}")
             return match.group(0)
@@ -91,6 +97,28 @@ def _resolve_image(
         return hexo_asset
 
     return None
+
+
+def _is_ignored_target(target: str) -> bool:
+    return target.lower().startswith(_IGNORED_PREFIXES)
+
+
+def _normalize_attachment_path(target: str) -> str | None:
+    decoded = unquote(target).replace("\\", "/")
+    if not decoded.startswith("attachments/"):
+        return None
+
+    normalized = posixpath.normpath(decoded)
+    if normalized == ".":
+        return ""
+
+    normalized = normalized.replace("\\", "/")
+    if normalized.startswith("../") or normalized == "..":
+        return ""
+    if not normalized.startswith("attachments/"):
+        return ""
+
+    return normalized
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:

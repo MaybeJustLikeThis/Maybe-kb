@@ -57,10 +57,95 @@ def test_collect_hexo_bare_image_uses_post_asset_folder(tmp_path: Path):
     assert result.content == f"![Cover]({rel} \"Hero\")\n"
 
 
+def test_collect_url_encoded_relative_image_decodes_before_resolution(tmp_path: Path):
+    """URL-encoded local image names resolve to their decoded filesystem names."""
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    image = source_root / "my image.png"
+    image.write_bytes(b"png-bytes")
+    post = source_root / "post.md"
+    markdown = "![Alt](my%20image.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+    )
+
+    rel = result.attachments[0]
+    assert rel.startswith("attachments/")
+    assert rel.endswith(".png")
+    assert (vault / rel).read_bytes() == b"png-bytes"
+    assert result.content == f"![Alt]({rel})\n"
+    assert result.warnings == []
+
+
 def test_collect_existing_attachment_link_is_recorded_but_not_rewritten(tmp_path: Path):
     """Existing vault attachment links stay stable and are returned as attachments."""
     post = tmp_path / "post.md"
     markdown = "![Stored](attachments/2026/06/abc.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=tmp_path,
+        vault=tmp_path / "vault",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == ["attachments/2026/06/abc.png"]
+    assert result.warnings == []
+
+
+def test_collect_existing_attachment_link_records_normalized_safe_path(tmp_path: Path):
+    """Existing attachment metadata is normalized while Markdown stays unchanged."""
+    post = tmp_path / "post.md"
+    markdown = "![Stored](attachments/2026/../06/abc.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=tmp_path,
+        vault=tmp_path / "vault",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == ["attachments/06/abc.png"]
+    assert result.warnings == []
+
+
+def test_collect_existing_attachment_link_rejects_traversal(tmp_path: Path):
+    """Existing attachment links cannot escape the attachments namespace."""
+    post = tmp_path / "post.md"
+    markdown = "\n".join([
+        "![Traversal](attachments/../secret.png)",
+        "![EncodedTraversal](attachments/%2e%2e/secret.png)",
+        "",
+    ])
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=tmp_path,
+        vault=tmp_path / "vault",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == []
+    assert result.warnings == [
+        "unsafe attachment path: attachments/../secret.png",
+        "unsafe attachment path: attachments/%2e%2e/secret.png",
+    ]
+
+
+def test_collect_existing_attachment_link_normalizes_windows_separators_for_metadata(
+    tmp_path: Path,
+):
+    """Existing attachment links with backslashes are recorded with slash metadata."""
+    post = tmp_path / "post.md"
+    markdown = r"![Stored](attachments\2026\06\abc.png)" "\n"
 
     result = collect_markdown_image_assets(
         markdown,
@@ -81,6 +166,27 @@ def test_collect_ignores_remote_data_and_root_relative_links(tmp_path: Path):
         "![Remote](https://example.com/a.png)",
         "![Data](data:image/png;base64,abc)",
         "![Root](/images/a.png)",
+        "",
+    ])
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=tmp_path,
+        vault=tmp_path / "vault",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == []
+    assert result.warnings == []
+
+
+def test_collect_ignores_remote_data_schemes_case_insensitively(tmp_path: Path):
+    """Ignored URL/data schemes are matched regardless of case."""
+    post = tmp_path / "post.md"
+    markdown = "\n".join([
+        "![Remote](HTTPS://example.com/a.png)",
+        "![Data](DATA:image/png;base64,abc)",
         "",
     ])
 
