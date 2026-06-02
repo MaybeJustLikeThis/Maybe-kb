@@ -5,6 +5,7 @@ from pathlib import Path
 
 from kb.core.config import KBConfig
 from kb.core.context import AppContext
+from kb.core.indexer import index_note_vectors
 from kb.core.rag import rag_query
 from kb.core.search import hybrid_search
 from kb.core.serializers import note_row_to_dict
@@ -20,16 +21,33 @@ def create_mcp_server(config: KBConfig):
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP("kb")
-    ctx = AppContext.from_config(config)
+    ctx = AppContext.from_config(
+        config,
+        with_embedding=False,
+        with_llm=False,
+    )
     vault = ctx.vault
     db = ctx.db
-    provider = ctx.embedding
-    llm = ctx.llm
-    store = ctx.vector_store
 
     def _blank_to_none(value: str) -> str | None:
         stripped = value.strip()
         return stripped or None
+
+    def _index_note_if_possible(file_id: str) -> tuple[int, str | None]:
+        try:
+            provider = ctx.ensure_embedding()
+            if provider is None:
+                return 0, "embedding provider is not configured"
+            count = index_note_vectors(
+                vault,
+                db,
+                provider,
+                file_id,
+                vector_store=ctx.vector_store,
+            )
+            return count, None
+        except Exception as exc:
+            return 0, str(exc)
 
     @mcp.tool()
     def kb_search(query: str, limit: int = 20) -> list[dict]:
@@ -40,8 +58,11 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_semantic_search(query: str, limit: int = 20) -> list[dict]:
         """Semantic search using BGE-small-zh embedding + LanceDB cosine similarity."""
+        provider = ctx.ensure_embedding()
+        if provider is None:
+            return [{"error": "embedding provider is not configured"}]
         embed_result = provider.embed(query)
-        records = store.search(embed_result.vector, limit=limit)
+        records = ctx.vector_store.search(embed_result.vector, limit=limit)
         results = []
         for r in records:
             row = db.get_note(r.id)
@@ -54,7 +75,10 @@ def create_mcp_server(config: KBConfig):
     @mcp.tool()
     def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
-        results = hybrid_search(query, db, provider, store, limit)
+        provider = ctx.ensure_embedding()
+        if provider is None:
+            return [{"error": "embedding provider is not configured"}]
+        results = hybrid_search(query, db, provider, ctx.vector_store, limit)
         return [
             {"file_id": r.file_id, "title": r.title,
              "score": r.score, "source": r.source}
@@ -129,12 +153,15 @@ def create_mcp_server(config: KBConfig):
             )
         except ValueError as e:
             return {"error": str(e)}
+        indexed_vectors, index_error = _index_note_if_possible(note.file_id)
         return {
             "file_id": note.file_id,
             "title": note.title,
             "content": note.content,
             "source_project": note.source_project,
             "tags": note.tags,
+            "indexed_vectors": indexed_vectors,
+            "index_error": index_error,
         }
 
     @mcp.tool()
@@ -188,21 +215,41 @@ def create_mcp_server(config: KBConfig):
             )
         except ValueError as e:
             return {"error": str(e)}
+        indexed_vectors, index_error = _index_note_if_possible(note.file_id)
         return {
             "file_id": note.file_id,
             "title": note.title,
             "source_project": note.source_project,
             "tags": note.tags,
+            "indexed_vectors": indexed_vectors,
+            "index_error": index_error,
         }
 
     @mcp.tool()
     def kb_rag_query(query: str, top_k: int = 5) -> dict:
         """RAG query: hybrid search + LLM answer over your knowledge base."""
-        response = rag_query(query, db, provider, store, llm, top_k=top_k)
+        from kb.core.rag import rag_source_to_dict
+
+        provider = ctx.ensure_embedding()
+        llm = ctx.ensure_llm()
+        if provider is None or llm is None:
+            return {"error": "LLM and embedding config required"}
+        response = rag_query(
+            query,
+            db,
+            provider,
+            ctx.vector_store,
+            llm,
+            top_k=top_k,
+        )
         return {
             "answer": response.text,
             "model": response.model,
             "tokens_used": response.tokens_used,
+            "sources": [
+                rag_source_to_dict(source)
+                for source in response.sources
+            ],
         }
 
     return mcp

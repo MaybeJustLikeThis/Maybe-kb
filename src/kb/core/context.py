@@ -70,6 +70,24 @@ class AppContext:
             vector_store=vector_store,
         )
 
+    def ensure_embedding(self) -> EmbeddingProvider | None:
+        """Initialize embedding provider on demand."""
+        if self.embedding is not None:
+            return self.embedding
+        if self.config is None or self.config.embedding is None:
+            return None
+        self.embedding = create_embedding_provider(self.config.embedding)
+        return self.embedding
+
+    def ensure_llm(self) -> LLMProvider | None:
+        """Initialize LLM provider on demand."""
+        if self.llm is not None:
+            return self.llm
+        if self.config is None or self.config.llm is None:
+            return None
+        self.llm = create_llm_provider(self.config.llm)
+        return self.llm
+
     def close(self) -> None:
         """Release all resources. Idempotent — safe to call multiple times."""
         if self._closed:

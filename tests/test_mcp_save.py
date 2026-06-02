@@ -182,3 +182,53 @@ def test_kb_add_rejects_empty_title(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert "title" in data
 
     anyio.run(_run)
+
+
+def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """kb_save best-effort indexes the created note and returns vector count."""
+    _prepare_vault(tmp_path, monkeypatch)
+
+    from kb.data.embedding import EmbeddingResult
+
+    class FakeEmbedding:
+        def embed(self, text):
+            return EmbeddingResult(vector=[1.0, 0.0, 0.0], dimension=3, tokens_used=len(text))
+
+        def embed_batch(self, texts):
+            return [self.embed(text) for text in texts]
+
+        @property
+        def dimension(self):
+            return 3
+
+    calls: list[str] = []
+
+    def fake_ensure_embedding(self):
+        return FakeEmbedding()
+
+    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
+        calls.append(file_id)
+        return 1
+
+    monkeypatch.setattr("kb.core.context.AppContext.ensure_embedding", fake_ensure_embedding)
+    monkeypatch.setattr("kb.mcp_server.index_note_vectors", fake_index_note_vectors)
+
+    config = KBConfig(vault_path=tmp_path.resolve())
+    from kb.mcp_server import create_mcp_server
+    mcp = create_mcp_server(config)
+
+    async def _run():
+        result = await mcp.call_tool("kb_save", {
+            "title": "Indexed MCP Save",
+            "content": "Body to index",
+            "source_project": "agent",
+        })
+        assert result is not None
+        content_list = result[0] if isinstance(result, tuple) else result
+        data = content_list[0].text if hasattr(content_list[0], "text") else str(content_list[0])
+        import json as _json
+        payload = _json.loads(data)
+        assert payload["indexed_vectors"] == 1
+        assert calls == [payload["file_id"]]
+
+    anyio.run(_run)
