@@ -23,7 +23,7 @@
         </div>
 
         <section
-          v-if="sourceProject || sourcePath || sourceContext || contentType !== 'markdown' || attachments.length"
+          v-if="contentType || sourceProject || sourcePath || sourceContext || attachments.length"
           class="note-meta-panel"
         >
           <div v-if="sourceProject" class="note-meta-item">
@@ -48,7 +48,7 @@
               <a
                 v-for="path in attachments"
                 :key="path"
-                :href="`/vault/${path}`"
+                :href="vaultHref(path)"
                 target="_blank"
                 rel="noreferrer"
               >{{ path }}</a>
@@ -146,6 +146,26 @@ const attachments = ref<string[]>([])
 const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; source_project: string | null; score: number }>>([])
 const relatedError = ref(false)
 
+function resetNoteState() {
+  title.value = ''
+  content.value = ''
+  category.value = ''
+  tagsInput.value = ''
+  noteUpdatedAt.value = ''
+  tags.value = []
+  sourceProject.value = null
+  sourcePath.value = null
+  sourceContext.value = null
+  contentType.value = 'markdown'
+  attachments.value = []
+  relatedNotes.value = []
+  relatedError.value = false
+}
+
+function vaultHref(path: string) {
+  return `/vault/${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
 const marked = new Marked(
   markedHighlight({
     langPrefix: 'hljs language-',
@@ -209,6 +229,11 @@ function syncTopBar() {
 watch([isEditing, title], syncTopBar, { immediate: true })
 
 async function loadNote() {
+  if (isNew.value) {
+    resetNoteState()
+    return
+  }
+
   if (!isNew.value && props.fileId) {
     loading.value = true
     try {
@@ -222,8 +247,8 @@ async function loadNote() {
       sourceProject.value = note.source_project
       sourcePath.value = note.source_path
       sourceContext.value = note.source_context
-      contentType.value = note.content_type
-      attachments.value = note.attachments
+      contentType.value = note.content_type || 'markdown'
+      attachments.value = note.attachments ?? []
       try {
         const related = await api.getRelatedNotes(props.fileId, 5)
         relatedNotes.value = related.map((result) => ({
@@ -236,6 +261,7 @@ async function loadNote() {
         relatedError.value = true
       }
     } catch {
+      resetNoteState()
       alert('Note not found')
       router.push('/')
     } finally {
