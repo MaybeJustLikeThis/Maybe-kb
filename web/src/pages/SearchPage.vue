@@ -25,6 +25,7 @@
           :key="item.value"
           type="button"
           :class="['mode-button', mode === item.value ? 'mode-button-active' : '']"
+          :aria-pressed="mode === item.value"
           @click="mode = item.value"
         >{{ item.label }}</button>
       </div>
@@ -45,7 +46,7 @@
     <section v-else-if="results.length > 0" class="results-section">
       <div class="results-header">
         <p>
-          {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}" via {{ mode }}
+          {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}" via {{ lastMode }}
         </p>
       </div>
 
@@ -100,6 +101,7 @@ import { api, type SearchMode, type SearchResult } from '../api'
 const query = ref('')
 const mode = ref<SearchMode>('fulltext')
 const lastQuery = ref('')
+const lastMode = ref<SearchMode>('fulltext')
 const results = ref<SearchResult[]>([])
 const searching = ref(false)
 const searchModes: Array<{ value: SearchMode; label: string }> = [
@@ -114,8 +116,9 @@ async function search() {
 
   searching.value = true
   lastQuery.value = q
+  lastMode.value = mode.value
   try {
-    results.value = await api.search(q, mode.value)
+    results.value = await api.search(q, lastMode.value)
   } finally {
     searching.value = false
   }
