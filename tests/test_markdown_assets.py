@@ -303,3 +303,33 @@ def test_collect_ignores_images_inside_fenced_code_blocks(tmp_path: Path):
     assert len(result.attachments) == 1
     assert (vault / result.attachments[0]).read_bytes() == b"real"
     assert result.warnings == []
+
+
+def test_collect_does_not_close_fence_on_info_string_inside_code(tmp_path: Path):
+    """Fence-like code with an info string does not close an open fence."""
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    (source_root / "real.png").write_bytes(b"real")
+    (source_root / "code.png").write_bytes(b"code")
+    post = source_root / "post.md"
+    markdown = (
+        "```\n"
+        "```js\n"
+        "![Code](code.png)\n"
+        "```\n\n"
+        "![Real](real.png)\n"
+    )
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+    )
+
+    assert "```js\n![Code](code.png)" in result.content
+    assert result.content.count("attachments/") == 1
+    assert result.content.endswith("![Real](" + result.attachments[0] + ")\n")
+    assert (vault / result.attachments[0]).read_bytes() == b"real"
+    assert result.warnings == []

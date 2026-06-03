@@ -90,7 +90,7 @@ def _rewrite_images_outside_fences(
 ) -> str:
     lines = markdown.splitlines(keepends=True)
     rewritten: list[str] = []
-    fence: str | None = None
+    fence: tuple[str, int] | None = None
 
     for line in lines:
         stripped = line.lstrip()
@@ -98,18 +98,28 @@ def _rewrite_images_outside_fences(
 
         if fence is None:
             if fence_match is not None:
-                fence = fence_match.group("fence")
+                fence_marker = fence_match.group("fence")
+                fence = (fence_marker[0], len(fence_marker))
                 rewritten.append(line)
             else:
                 rewritten.append(_IMAGE_RE.sub(rewrite, line))
             continue
 
         rewritten.append(line)
-        if fence_match is not None and fence_match.group("fence").startswith(fence[0]):
-            if len(fence_match.group("fence")) >= len(fence):
-                fence = None
+        if _is_closing_fence(stripped, fence):
+            fence = None
 
     return "".join(rewritten)
+
+
+def _is_closing_fence(line: str, fence: tuple[str, int]) -> bool:
+    fence_char, fence_len = fence
+    body = line.rstrip("\r\n")
+    marker_match = re.match(rf"^{re.escape(fence_char)}{{{fence_len},}}", body)
+    if marker_match is None:
+        return False
+
+    return body[marker_match.end():].strip() == ""
 
 
 def _resolve_image(
