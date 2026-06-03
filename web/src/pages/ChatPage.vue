@@ -28,6 +28,26 @@
             class="msg-bubble"
           >
             <div class="message-content">{{ msg.content }}</div>
+            <div v-if="msg.sources?.length" class="source-list">
+              <router-link
+                v-for="source in msg.sources"
+                :key="source.file_id"
+                :to="source.source_project ? `/source/${source.source_project}/${encodeURIComponent(source.file_id)}` : `/note/${encodeURIComponent(source.file_id)}`"
+                class="source-card"
+              >
+                <div class="source-card-main">
+                  <strong>{{ source.title }}</strong>
+                  <p>{{ source.snippet }}</p>
+                </div>
+                <div class="source-card-meta">
+                  <span>{{ source.content_type }}</span>
+                  <span v-if="source.attachments.length">
+                    {{ source.attachments.length }} attachment{{ source.attachments.length > 1 ? 's' : '' }}
+                  </span>
+                  <span v-if="source.source_path">{{ source.source_path }}</span>
+                </div>
+              </router-link>
+            </div>
           </div>
         </div>
 
@@ -62,12 +82,13 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import { api, ApiError } from '../api'
+import { api, ApiError, type RAGSource } from '../api'
 
 interface ChatMessage {
   id: number
   role: 'user' | 'assistant'
   content: string
+  sources?: RAGSource[]
 }
 
 const query = ref('')
@@ -86,7 +107,12 @@ async function ask() {
 
   try {
     const res = await api.chatAsk(q)
-    messages.value.push({ id: ++nextId, role: 'assistant', content: res.answer })
+    messages.value.push({
+      id: ++nextId,
+      role: 'assistant',
+      content: res.answer,
+      sources: res.sources,
+    })
   } catch (e) {
     const providerNotConfigured =
       e instanceof ApiError && e.code === 'PROVIDER_NOT_CONFIGURED'
@@ -236,6 +262,48 @@ watch(() => messages.value.length, async () => {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.source-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.source-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(8, 145, 178, 0.16);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-tinted);
+}
+
+.source-card:hover {
+  border-color: var(--color-primary);
+}
+
+.source-card-main strong {
+  display: block;
+  color: var(--color-primary-hover);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.source-card-main p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.source-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
 }
 
 .command-bar {
