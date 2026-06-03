@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path
 import posixpath
 import re
@@ -22,6 +23,7 @@ class CollectedMarkdownAssets:
 _IMAGE_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<body>[^)]*)\)")
 _TARGET_RE = re.compile(r"^(?P<target>.+?)(?P<title>\s+\"[^\"]*\")?$")
 _IGNORED_PREFIXES = ("http://", "https://", "data:", "/")
+_FENCE_RE = re.compile(r"^(?P<fence>`{3,}|~{3,})")
 
 
 def collect_markdown_image_assets(
@@ -66,16 +68,48 @@ def collect_markdown_image_assets(
             warnings.append(f"blocked image outside source root: {target}")
             return match.group(0)
 
-        rel_path = store_attachment(resolved, vault)
+        try:
+            rel_path = store_attachment(resolved, vault)
+        except Exception as exc:
+            warnings.append(f"failed to store image {target}: {exc}")
+            return match.group(0)
         _append_unique(attachments, rel_path)
         return f"![{alt}]({rel_path}{title})"
 
-    content = _IMAGE_RE.sub(rewrite, markdown)
+    content = _rewrite_images_outside_fences(markdown, rewrite)
     return CollectedMarkdownAssets(
         content=content,
         attachments=attachments,
         warnings=warnings,
     )
+
+
+def _rewrite_images_outside_fences(
+    markdown: str,
+    rewrite: Callable[[re.Match[str]], str],
+) -> str:
+    lines = markdown.splitlines(keepends=True)
+    rewritten: list[str] = []
+    fence: str | None = None
+
+    for line in lines:
+        stripped = line.lstrip()
+        fence_match = _FENCE_RE.match(stripped)
+
+        if fence is None:
+            if fence_match is not None:
+                fence = fence_match.group("fence")
+                rewritten.append(line)
+            else:
+                rewritten.append(_IMAGE_RE.sub(rewrite, line))
+            continue
+
+        rewritten.append(line)
+        if fence_match is not None and fence_match.group("fence").startswith(fence[0]):
+            if len(fence_match.group("fence")) >= len(fence):
+                fence = None
+
+    return "".join(rewritten)
 
 
 def _resolve_image(

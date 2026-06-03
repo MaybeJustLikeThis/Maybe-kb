@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import kb.core.markdown_assets as markdown_assets
 from kb.core.markdown_assets import collect_markdown_image_assets
 
 
@@ -238,3 +241,65 @@ def test_collect_blocks_paths_outside_source_root(tmp_path: Path):
     assert result.content == markdown
     assert result.attachments == []
     assert result.warnings == ["blocked image outside source root: ../outside.png"]
+
+
+def test_collect_store_failure_keeps_link_and_warns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Attachment storage failures do not abort collection or rewrite links."""
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    image = source_root / "diagram.png"
+    image.write_bytes(b"png-bytes")
+    post = source_root / "post.md"
+    markdown = "![Diagram](diagram.png)\n"
+
+    def fail_store(_source: Path, _vault: Path) -> str:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(markdown_assets, "store_attachment", fail_store)
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+    )
+
+    assert result.content == markdown
+    assert result.attachments == []
+    assert result.warnings == ["failed to store image diagram.png: disk full"]
+
+
+def test_collect_ignores_images_inside_fenced_code_blocks(tmp_path: Path):
+    """Image-looking Markdown in fenced code blocks is preserved as code."""
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    (source_root / "real.png").write_bytes(b"real")
+    (source_root / "code.png").write_bytes(b"code")
+    post = source_root / "post.md"
+    markdown = (
+        "```markdown\n"
+        "![Code](code.png)\n"
+        "```\n\n"
+        "![Real](real.png)\n"
+    )
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+    )
+
+    assert "![Code](code.png)" in result.content
+    assert result.content.count("attachments/") == 1
+    assert result.content.startswith(
+        "```markdown\n![Code](code.png)\n```\n\n![Real](attachments/"
+    )
+    assert len(result.attachments) == 1
+    assert (vault / result.attachments[0]).read_bytes() == b"real"
+    assert result.warnings == []
