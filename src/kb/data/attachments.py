@@ -22,6 +22,11 @@ def store_attachment(source: Path, vault_path: Path) -> str:
     data = source.read_bytes()
     ext = source.suffix.lower()
     hash_name = _content_hash(data)
+
+    existing_path = _find_existing_attachment(vault_path, hash_name, ext, data)
+    if existing_path is not None:
+        return existing_path
+
     now = datetime.now()
     rel_path = f"{ATTACHMENTS_DIR}/{now.year}/{now.month:02d}/{hash_name}{ext}"
 
@@ -31,3 +36,21 @@ def store_attachment(source: Path, vault_path: Path) -> str:
         dest.write_bytes(data)
 
     return rel_path
+
+
+def _find_existing_attachment(
+    vault_path: Path,
+    hash_name: str,
+    ext: str,
+    data: bytes,
+) -> str | None:
+    attachments_root = vault_path / ATTACHMENTS_DIR
+    if not attachments_root.exists():
+        return None
+
+    matches = sorted(attachments_root.rglob(f"{hash_name}{ext}"))
+    for path in matches:
+        if path.is_file() and path.read_bytes() == data:
+            return path.relative_to(vault_path).as_posix()
+
+    return None

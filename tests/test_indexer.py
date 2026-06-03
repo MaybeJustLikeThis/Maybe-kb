@@ -1,6 +1,10 @@
 """Tests for SQLite indexer and index operations."""
-import pytest
+import hashlib
+from datetime import datetime
 from pathlib import Path
+
+import pytest
+
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider, EmbeddingResult
 from kb.data.vector import VectorRecord
@@ -309,6 +313,140 @@ def test_index_files_external_sources_collects_relative_images(
     assert len(attachments) == 1
     assert attachments[0].startswith("attachments/")
     assert (vault / attachments[0]).read_bytes() == b"diagram"
+
+
+def test_index_files_external_sources_preserves_body_leading_whitespace(
+    db: Database,
+    tmp_path: Path,
+):
+    """External source frontmatter merge preserves the Markdown body exactly."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    external = tmp_path / "blog"
+    posts = external / "posts"
+    posts.mkdir(parents=True)
+    (posts / "diagram.png").write_bytes(b"diagram")
+    (posts / "post.md").write_text(
+        "---\n"
+        "title: Whitespace\n"
+        "categories: docs\n"
+        "---\n"
+        "\n"
+        "  leading spaces stay\n"
+        "\n"
+        "```text\n"
+        "  code block stays\n"
+        "```\n"
+        "\n"
+        "![Diagram](./diagram.png)\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        source_project="blog",
+    )
+
+    attachments = db.get_attachments("notes/docs/post.md")
+    assert len(attachments) == 1
+    text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
+    body = text.split("---\n", 2)[2]
+    assert body == (
+        "\n"
+        "  leading spaces stay\n"
+        "\n"
+        "```text\n"
+        "  code block stays\n"
+        "```\n"
+        "\n"
+        f"![Diagram]({attachments[0]})\n"
+    )
+
+
+def test_index_files_external_sources_dedupes_merged_attachments(
+    db: Database,
+    tmp_path: Path,
+):
+    """Existing and collected attachment paths merge to a unique list."""
+    vault = tmp_path / "vault"
+    existing_path = "attachments/2026/05/existing.png"
+    (vault / existing_path).parent.mkdir(parents=True)
+    (vault / existing_path).write_bytes(b"existing")
+
+    external = tmp_path / "blog"
+    external.mkdir()
+    (external / "post.md").write_text(
+        "---\n"
+        "title: Dedupe\n"
+        "categories: docs\n"
+        "attachments:\n"
+        f"- {existing_path}\n"
+        f"- {existing_path}\n"
+        "---\n\n"
+        f"![Existing]({existing_path})\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        source_project="blog",
+    )
+
+    text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
+    assert text.count(f"- {existing_path}") == 1
+    assert db.get_attachments("notes/docs/post.md") == [existing_path]
+
+
+def test_index_files_external_sources_reuses_existing_attachment_hash_path(
+    db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Repeated external sync reuses an older matching hash path deterministically."""
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls) -> datetime:
+            return cls(2026, 6, 3)
+
+    monkeypatch.setattr("kb.data.attachments.datetime", FrozenDateTime)
+
+    vault = tmp_path / "vault"
+    external = tmp_path / "blog"
+    external.mkdir()
+    image_data = b"same image content"
+    (external / "diagram.png").write_bytes(image_data)
+    (external / "post.md").write_text(
+        "---\n"
+        "title: Stable Attachments\n"
+        "categories: docs\n"
+        "---\n\n"
+        "![Diagram](./diagram.png)\n",
+        encoding="utf-8",
+    )
+
+    hash_name = hashlib.sha256(image_data).hexdigest()[:12]
+    existing_path = f"attachments/2026/05/{hash_name}.png"
+    (vault / existing_path).parent.mkdir(parents=True)
+    (vault / existing_path).write_bytes(image_data)
+    db.initialize()
+
+    index_files(vault, db, full=True, external_sources=[external])
+    first_text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
+    index_files(vault, db, full=True, external_sources=[external])
+    second_text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
+
+    assert first_text == second_text
+    assert f"![Diagram]({existing_path})" in second_text
+    assert db.get_attachments("notes/docs/post.md") == [existing_path]
+    assert not (vault / f"attachments/2026/06/{hash_name}.png").exists()
 
 
 def test_index_files_external_sources_collects_hexo_asset_folder(

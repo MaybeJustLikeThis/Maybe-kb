@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,6 @@ from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
 from kb.data.storage import (
     _compute_hash as compute_file_hash,
-    _split_frontmatter,
     chunk_text,
     discover_notes,
     parse_markdown_file,
@@ -21,6 +21,11 @@ from kb.data.vector import VectorRecord, VectorStore
 
 logger = logging.getLogger(__name__)
 
+_FRONTMATTER_BOUNDARY_RE = re.compile(
+    r"^---[ \t]*\r?\n(?P<raw>.*?)\r?\n---[ \t]*(?:\r?\n|$)",
+    re.DOTALL,
+)
+
 
 def _merge_external_frontmatter(
     markdown: str,
@@ -28,7 +33,7 @@ def _merge_external_frontmatter(
     source_project: str | None,
     attachments: list[str],
 ) -> str:
-    frontmatter, body = _split_frontmatter(markdown)
+    frontmatter, body = _split_frontmatter_preserving_body(markdown)
     data: dict[str, Any] = dict(frontmatter)
     changed = False
 
@@ -36,14 +41,17 @@ def _merge_external_frontmatter(
         data["source_project"] = source_project
         changed = True
 
-    existing = data.get("attachments") or []
-    if isinstance(existing, str):
-        existing = [existing]
-    merged_attachments = list(existing)
-    for path in attachments:
+    existing_value = data.get("attachments") or []
+    if isinstance(existing_value, str):
+        existing_attachments = [existing_value]
+    else:
+        existing_attachments = list(existing_value)
+    merged_attachments = []
+    for path in [*existing_attachments, *attachments]:
         if path not in merged_attachments:
             merged_attachments.append(path)
-            changed = True
+    if merged_attachments != existing_attachments:
+        changed = True
     if merged_attachments:
         data["attachments"] = merged_attachments
 
@@ -56,7 +64,20 @@ def _merge_external_frontmatter(
         default_flow_style=False,
         sort_keys=False,
     ).strip()
-    return f"---\n{raw}\n---\n\n{body.lstrip()}"
+    return f"---\n{raw}\n---\n{body}"
+
+
+def _split_frontmatter_preserving_body(markdown: str) -> tuple[dict[str, Any], str]:
+    match = _FRONTMATTER_BOUNDARY_RE.match(markdown)
+    if match is None:
+        return {}, markdown
+
+    try:
+        data = yaml.safe_load(match.group("raw")) or {}
+    except yaml.YAMLError:
+        data = {}
+
+    return data, markdown[match.end():]
 
 
 def index_files(
