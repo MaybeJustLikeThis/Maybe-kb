@@ -3,14 +3,25 @@
     <div :class="preview ? 'flex-1' : 'w-full'">
       <div class="flex items-center justify-between mb-1">
         <label class="text-sm font-medium text-gray-600">Markdown</label>
-        <button
-          @click="preview = !preview"
-          class="text-xs text-blue-600 hover:underline"
-        >{{ preview ? 'Hide Preview' : 'Show Preview' }}</button>
+        <div class="flex items-center gap-3">
+          <button
+            @click="preview = !preview"
+            class="text-xs text-blue-600 hover:underline"
+          >{{ preview ? 'Hide Preview' : 'Show Preview' }}</button>
+          <label class="text-xs text-blue-600 hover:underline cursor-pointer">
+            {{ uploading ? 'Uploading...' : 'Upload Asset' }}
+            <input
+              type="file"
+              class="hidden"
+              :disabled="uploading"
+              @change="uploadAsset"
+            />
+          </label>
+        </div>
       </div>
       <textarea
         :value="modelValue"
-        @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
+        @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
         class="w-full p-3 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none"
         :class="preview ? 'h-96' : 'h-[32rem]'"
       ></textarea>
@@ -28,17 +39,41 @@ import { markedHighlight } from 'marked-highlight'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.min.css'
+import { api } from '../api'
 
 const props = defineProps<{
   modelValue: string
   noteDir?: string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
 const preview = ref(true)
+const uploading = ref(false)
+
+async function uploadAsset(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || uploading.value) return
+
+  uploading.value = true
+  try {
+    const result = await api.uploadAttachment(file)
+    const isImage = file.type.startsWith('image/')
+    const markdown = isImage
+      ? `![${file.name}](${result.path})`
+      : `[${file.name}](${result.path})`
+    const nextValue = props.modelValue
+      ? `${props.modelValue.replace(/\s*$/, '')}\n\n${markdown}\n`
+      : `${markdown}\n`
+    emit('update:modelValue', nextValue)
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
 
 const marked = new Marked(
   markedHighlight({
