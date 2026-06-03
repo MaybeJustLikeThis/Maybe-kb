@@ -19,6 +19,15 @@
         placeholder="Search notes..."
         autofocus
       />
+      <div class="mode-toggle" aria-label="Search mode">
+        <button
+          v-for="item in searchModes"
+          :key="item.value"
+          type="button"
+          :class="['mode-button', mode === item.value ? 'mode-button-active' : '']"
+          @click="mode = item.value"
+        >{{ item.label }}</button>
+      </div>
       <button
         class="btn btn-primary command-button"
         :disabled="searching || !query.trim()"
@@ -36,14 +45,14 @@
     <section v-else-if="results.length > 0" class="results-section">
       <div class="results-header">
         <p>
-          {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}"
+          {{ results.length }} result{{ results.length !== 1 ? 's' : '' }} for "{{ lastQuery }}" via {{ mode }}
         </p>
       </div>
 
       <ul class="results-list">
         <li v-for="result in results" :key="result.note.file_id" class="result-item">
           <router-link
-            :to="result.note.source_project ? `/source/${result.note.source_project}/${encodeURIComponent(result.note.file_id)}` : `/note/${encodeURIComponent(result.note.file_id)}`"
+            :to="result.note.source_project ? `/source/${encodeURIComponent(result.note.source_project)}/${encodeURIComponent(result.note.file_id)}` : `/note/${encodeURIComponent(result.note.file_id)}`"
             class="result-card"
           >
             <div class="result-main">
@@ -86,12 +95,18 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { api, type SearchResult } from '../api'
+import { api, type SearchMode, type SearchResult } from '../api'
 
 const query = ref('')
+const mode = ref<SearchMode>('fulltext')
 const lastQuery = ref('')
 const results = ref<SearchResult[]>([])
 const searching = ref(false)
+const searchModes: Array<{ value: SearchMode; label: string }> = [
+  { value: 'fulltext', label: 'Fulltext' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'semantic', label: 'Semantic' },
+]
 
 async function search() {
   const q = query.value.trim()
@@ -100,7 +115,7 @@ async function search() {
   searching.value = true
   lastQuery.value = q
   try {
-    results.value = await api.search(q)
+    results.value = await api.search(q, mode.value)
   } finally {
     searching.value = false
   }
@@ -179,6 +194,32 @@ async function search() {
 .command-input {
   min-height: 42px;
   font-size: 0.95rem;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  min-height: 36px;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-solid);
+}
+
+.mode-button {
+  min-width: 72px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.mode-button-active {
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
 }
 
 .command-button {
@@ -314,6 +355,15 @@ async function search() {
 @media (max-width: 720px) {
   .command-card {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mode-toggle {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .mode-button {
+    flex: 1;
   }
 
   .command-button {
