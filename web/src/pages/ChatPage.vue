@@ -32,7 +32,7 @@
               <router-link
                 v-for="source in msg.sources"
                 :key="source.file_id"
-                :to="source.source_project ? `/source/${source.source_project}/${encodeURIComponent(source.file_id)}` : `/note/${encodeURIComponent(source.file_id)}`"
+                :to="source.source_project ? `/source/${encodeURIComponent(source.source_project)}/${encodeURIComponent(source.file_id)}` : `/note/${encodeURIComponent(source.file_id)}`"
                 class="source-card"
               >
                 <div class="source-card-main">
@@ -288,6 +288,7 @@ watch(() => messages.value.length, async () => {
   color: var(--color-primary-hover);
   font-size: 0.84rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .source-card-main p {
@@ -304,6 +305,10 @@ watch(() => messages.value.length, async () => {
   gap: 6px;
   color: var(--color-text-muted);
   font-size: 0.72rem;
+}
+
+.source-card-meta span {
+  overflow-wrap: anywhere;
 }
 
 .command-bar {
