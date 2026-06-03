@@ -73,9 +73,11 @@ def _split_frontmatter_preserving_body(markdown: str) -> tuple[dict[str, Any], s
         return {}, markdown
 
     try:
-        data = yaml.safe_load(match.group("raw")) or {}
+        parsed = yaml.safe_load(match.group("raw")) or {}
     except yaml.YAMLError:
-        data = {}
+        parsed = {}
+
+    data = parsed if isinstance(parsed, dict) else {}
 
     return data, markdown[match.end():]
 

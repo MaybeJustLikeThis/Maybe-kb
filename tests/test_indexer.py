@@ -405,6 +405,40 @@ def test_index_files_external_sources_dedupes_merged_attachments(
     assert db.get_attachments("notes/docs/post.md") == [existing_path]
 
 
+def test_index_files_external_sources_handles_non_mapping_frontmatter(
+    db: Database,
+    tmp_path: Path,
+):
+    """Valid non-mapping YAML frontmatter does not crash external sync."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    external = tmp_path / "blog"
+    external.mkdir()
+    (external / "post.md").write_text(
+        "---\n"
+        "- not-a-mapping\n"
+        "---\n\n"
+        "Body\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    indexed, _ = index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        source_project="blog",
+    )
+
+    assert indexed == 1
+    synced = list((vault / "notes").rglob("post.md"))
+    assert len(synced) == 1
+    text = synced[0].read_text(encoding="utf-8")
+    assert "source_project: blog" in text
+    assert "\nBody\n" in text
+
+
 def test_index_files_external_sources_reuses_existing_attachment_hash_path(
     db: Database,
     tmp_path: Path,
