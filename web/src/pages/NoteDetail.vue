@@ -188,8 +188,10 @@ const renderedContent = computed(() => {
     const noteDir = props.fileId.substring(0, props.fileId.lastIndexOf('/') + 1)
     html = html.replace(
       /(<img\s[^>]*\bsrc=")((?!https?:\/\/|\/|data:)[^"]+)(")/gi,
-      (_m: string, prefix: string, src: string, suffix: string) =>
-        `${prefix}/vault/${noteDir}${src}${suffix}`,
+      (_m: string, prefix: string, src: string, suffix: string) => {
+        const base = src.startsWith('attachments/') ? '' : noteDir
+        return `${prefix}/vault/${base}${src}${suffix}`
+      },
     )
   }
   return html

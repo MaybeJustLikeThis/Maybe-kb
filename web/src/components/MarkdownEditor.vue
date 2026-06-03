@@ -8,9 +8,15 @@
             @click="preview = !preview"
             class="text-xs text-blue-600 hover:underline"
           >{{ preview ? 'Hide Preview' : 'Show Preview' }}</button>
-          <label class="text-xs text-blue-600 hover:underline cursor-pointer">
+          <label
+            class="text-xs text-blue-600 hover:underline cursor-pointer"
+            tabindex="0"
+            @keydown.enter.prevent="fileInput?.click()"
+            @keydown.space.prevent="fileInput?.click()"
+          >
             {{ uploading ? 'Uploading...' : 'Upload Asset' }}
             <input
+              ref="fileInput"
               type="file"
               class="hidden"
               :disabled="uploading"
@@ -19,6 +25,7 @@
           </label>
         </div>
       </div>
+      <p v-if="uploadError" class="text-xs text-red-600 mb-1">{{ uploadError }}</p>
       <textarea
         :value="modelValue"
         @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
@@ -52,6 +59,8 @@ const emit = defineEmits<{
 
 const preview = ref(true)
 const uploading = ref(false)
+const uploadError = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 async function uploadAsset(event: Event) {
   const input = event.target as HTMLInputElement
@@ -59,20 +68,28 @@ async function uploadAsset(event: Event) {
   if (!file || uploading.value) return
 
   uploading.value = true
+  uploadError.value = ''
   try {
     const result = await api.uploadAttachment(file)
     const isImage = file.type.startsWith('image/')
+    const label = escapeMarkdownLinkText(file.name)
     const markdown = isImage
-      ? `![${file.name}](${result.path})`
-      : `[${file.name}](${result.path})`
+      ? `![${label}](${result.path})`
+      : `[${label}](${result.path})`
     const nextValue = props.modelValue
       ? `${props.modelValue.replace(/\s*$/, '')}\n\n${markdown}\n`
       : `${markdown}\n`
     emit('update:modelValue', nextValue)
+  } catch (e) {
+    uploadError.value = e instanceof Error ? e.message : 'Upload failed.'
   } finally {
     uploading.value = false
     input.value = ''
   }
+}
+
+function escapeMarkdownLinkText(text: string) {
+  return text.replace(/[\r\n]+/g, ' ').replace(/([\\[\]])/g, '\\$1')
 }
 
 const marked = new Marked(
@@ -94,8 +111,10 @@ const renderedHtml = computed(() => {
   if (props.noteDir) {
     html = html.replace(
       /(<img\s[^>]*\bsrc=")((?!https?:\/\/|\/|data:)[^"]+)(")/gi,
-      (_m: string, prefix: string, src: string, suffix: string) =>
-        `${prefix}/vault/${props.noteDir}${src}${suffix}`,
+      (_m: string, prefix: string, src: string, suffix: string) => {
+        const base = src.startsWith('attachments/') ? '' : props.noteDir
+        return `${prefix}/vault/${base}${src}${suffix}`
+      },
     )
   }
   return html
