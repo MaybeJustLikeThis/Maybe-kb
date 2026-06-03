@@ -22,6 +22,40 @@
           <span v-if="noteUpdatedAt">{{ noteUpdatedAt }}</span>
         </div>
 
+        <section
+          v-if="sourceProject || sourcePath || sourceContext || contentType !== 'markdown' || attachments.length"
+          class="note-meta-panel"
+        >
+          <div v-if="sourceProject" class="note-meta-item">
+            <span>Source</span>
+            <strong>{{ sourceProject }}</strong>
+          </div>
+          <div v-if="contentType" class="note-meta-item">
+            <span>Type</span>
+            <strong>{{ contentType }}</strong>
+          </div>
+          <div v-if="sourcePath" class="note-meta-item note-meta-wide">
+            <span>Source path</span>
+            <strong>{{ sourcePath }}</strong>
+          </div>
+          <div v-if="sourceContext" class="note-meta-item note-meta-wide">
+            <span>Context</span>
+            <strong>{{ sourceContext }}</strong>
+          </div>
+          <div v-if="attachments.length" class="note-meta-item note-meta-wide">
+            <span>Attachments</span>
+            <div class="attachment-list">
+              <a
+                v-for="path in attachments"
+                :key="path"
+                :href="`/vault/${path}`"
+                target="_blank"
+                rel="noreferrer"
+              >{{ path }}</a>
+            </div>
+          </div>
+        </section>
+
         <div v-html="renderedContent" class="prose prose-slate max-w-none"></div>
       </template>
 
@@ -104,6 +138,11 @@ const loading = ref(false)
 const isEditing = ref(isNew.value)
 const noteUpdatedAt = ref('')
 const tags = ref<string[]>([])
+const sourceProject = ref<string | null>(null)
+const sourcePath = ref<string | null>(null)
+const sourceContext = ref<string | null>(null)
+const contentType = ref('markdown')
+const attachments = ref<string[]>([])
 const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; source_project: string | null; score: number }>>([])
 const relatedError = ref(false)
 
@@ -180,6 +219,11 @@ async function loadNote() {
       tags.value = note.tags
       tagsInput.value = note.tags.join(', ')
       noteUpdatedAt.value = note.updated_at || note.created_at || ''
+      sourceProject.value = note.source_project
+      sourcePath.value = note.source_path
+      sourceContext.value = note.source_context
+      contentType.value = note.content_type
+      attachments.value = note.attachments
       try {
         const related = await api.getRelatedNotes(props.fileId, 5)
         relatedNotes.value = related.map((result) => ({
@@ -258,3 +302,59 @@ async function deleteNote() {
   router.push('/')
 }
 </script>
+
+<style scoped>
+.note-meta-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: -12px 0 24px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.note-meta-item {
+  min-width: 0;
+}
+
+.note-meta-wide {
+  grid-column: 1 / -1;
+}
+
+.note-meta-item span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.note-meta-item strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.attachment-list a {
+  color: var(--color-primary-hover);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .note-meta-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>
