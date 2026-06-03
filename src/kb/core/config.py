@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import tomllib
 
@@ -33,6 +33,21 @@ class RAGConfig:
 
 
 @dataclass(frozen=True)
+class GeneralConfig:
+    notes_dir: str = "notes"
+    attachments_dir: str = "attachments"
+    index_dir: str = ".kb"
+
+
+@dataclass(frozen=True)
+class ObsidianConfig:
+    enabled: bool = False
+    vault_name: str = ""
+    vault_path: Path | None = None
+    open_uri_strategy: str = "file"
+
+
+@dataclass(frozen=True)
 class SourceConfig:
     label: str
     description: str = ""
@@ -46,6 +61,7 @@ class ServerConfig:
     host: str = "127.0.0.1"
     port: int = 8420
     watch_dir: str | None = None
+    watch_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -57,6 +73,34 @@ class KBConfig:
     rag: RAGConfig = field(default_factory=RAGConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     sources: dict[str, SourceConfig] = field(default_factory=dict)
+    general: GeneralConfig = field(default_factory=GeneralConfig)
+    obsidian: ObsidianConfig = field(default_factory=ObsidianConfig)
+
+    @property
+    def notes_path(self) -> Path:
+        return self.vault_path / self.general.notes_dir
+
+    @property
+    def attachments_path(self) -> Path:
+        return self.vault_path / self.general.attachments_dir
+
+    @property
+    def index_path(self) -> Path:
+        return self.vault_path / self.general.index_dir
+
+
+def _validate_vault_subpath(name: str, value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty relative vault subpath")
+
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    if path.is_absolute() or windows_path.is_absolute():
+        raise ValueError(f"{name} must be a relative vault subpath")
+    if ".." in path.parts or ".." in windows_path.parts:
+        raise ValueError(f"{name} must not contain '..' path segments")
+
+    return value
 
 
 def load_config(base_path: Path) -> KBConfig:
@@ -70,6 +114,7 @@ def load_config(base_path: Path) -> KBConfig:
         data = tomllib.load(f)
 
     general = data.get("general", {})
+    obsidian_data = data.get("obsidian", {})
     search_data = data.get("search", {})
     embedding_data = data.get("embedding", {})
     llm_data = data.get("llm", {})
@@ -87,7 +132,22 @@ def load_config(base_path: Path) -> KBConfig:
         )
 
     vault_rel = general.get("vault_path", ".")
-    vault_path = (base_path / vault_rel).resolve()
+    vault_path_raw = Path(vault_rel).expanduser()
+    vault_path = (
+        vault_path_raw.resolve()
+        if vault_path_raw.is_absolute()
+        else (base_path / vault_path_raw).resolve()
+    )
+
+    obsidian_vault_raw = obsidian_data.get("vault_path")
+    obsidian_vault_path = None
+    if obsidian_vault_raw:
+        raw_path = Path(obsidian_vault_raw).expanduser()
+        obsidian_vault_path = (
+            raw_path.resolve()
+            if raw_path.is_absolute()
+            else (base_path / raw_path).resolve()
+        )
 
     return KBConfig(
         vault_path=vault_path,
@@ -109,6 +169,25 @@ def load_config(base_path: Path) -> KBConfig:
             host=server_data.get("host", "127.0.0.1"),
             port=server_data.get("port", 8420),
             watch_dir=server_data.get("watch_dir"),
+            watch_enabled=server_data.get("watch_enabled", True),
         ),
         sources=sources,
+        general=GeneralConfig(
+            notes_dir=_validate_vault_subpath(
+                "general.notes_dir", general.get("notes_dir", "notes")
+            ),
+            attachments_dir=_validate_vault_subpath(
+                "general.attachments_dir",
+                general.get("attachments_dir", "attachments"),
+            ),
+            index_dir=_validate_vault_subpath(
+                "general.index_dir", general.get("index_dir", ".kb")
+            ),
+        ),
+        obsidian=ObsidianConfig(
+            enabled=obsidian_data.get("enabled", False),
+            vault_name=obsidian_data.get("vault_name", ""),
+            vault_path=obsidian_vault_path,
+            open_uri_strategy=obsidian_data.get("open_uri_strategy", "file"),
+        ),
     )
