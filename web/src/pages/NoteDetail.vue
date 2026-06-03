@@ -145,6 +145,7 @@ const contentType = ref('markdown')
 const attachments = ref<string[]>([])
 const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; source_project: string | null; score: number }>>([])
 const relatedError = ref(false)
+let loadRequestId = 0
 
 function resetNoteState() {
   title.value = ''
@@ -229,15 +230,21 @@ function syncTopBar() {
 watch([isEditing, title], syncTopBar, { immediate: true })
 
 async function loadNote() {
+  const requestId = ++loadRequestId
+  const fileId = props.fileId
+
   if (isNew.value) {
     resetNoteState()
+    loading.value = false
     return
   }
 
-  if (!isNew.value && props.fileId) {
+  if (!isNew.value && fileId) {
     loading.value = true
     try {
-      const note = await api.getNote(props.fileId)
+      const note = await api.getNote(fileId)
+      if (requestId !== loadRequestId || props.fileId !== fileId) return
+
       title.value = note.title
       content.value = note.content
       category.value = note.category || ''
@@ -250,22 +257,30 @@ async function loadNote() {
       contentType.value = note.content_type || 'markdown'
       attachments.value = note.attachments ?? []
       try {
-        const related = await api.getRelatedNotes(props.fileId, 5)
+        const related = await api.getRelatedNotes(fileId, 5)
+        if (requestId !== loadRequestId || props.fileId !== fileId) return
+
         relatedNotes.value = related.map((result) => ({
           ...result.note,
           score: result.score ?? 0,
         }))
         relatedError.value = false
       } catch {
+        if (requestId !== loadRequestId || props.fileId !== fileId) return
+
         relatedNotes.value = []
         relatedError.value = true
       }
     } catch {
+      if (requestId !== loadRequestId || props.fileId !== fileId) return
+
       resetNoteState()
       alert('Note not found')
       router.push('/')
     } finally {
-      loading.value = false
+      if (requestId === loadRequestId && props.fileId === fileId) {
+        loading.value = false
+      }
     }
   }
 }
