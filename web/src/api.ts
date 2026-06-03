@@ -64,6 +64,18 @@ export interface NoteDetail extends NoteSummary {
   attachments: string[]
 }
 
+export type SearchMode = 'fulltext' | 'semantic' | 'hybrid'
+
+export interface RAGSource {
+  file_id: string
+  title: string
+  snippet: string
+  source_project: string | null
+  source_path: string | null
+  content_type: string
+  attachments: string[]
+}
+
 export type Note = NoteSummary & {
   content?: string
   attachments?: string[]
@@ -178,10 +190,19 @@ export const api = {
     })
   },
 
-  search(q: string, limit?: number) {
-    const qs = new URLSearchParams({ q, mode: 'fulltext' })
+  search(q: string, mode: SearchMode = 'fulltext', limit?: number) {
+    const qs = new URLSearchParams({ q, mode })
     if (limit) qs.set('limit', String(limit))
     return request<SearchResult[]>(`/search?${qs}`)
+  },
+
+  uploadAttachment(file: File) {
+    const formData = new FormData()
+    formData.set('file', file)
+    return request<{ path: string }>('/attachments', {
+      method: 'POST',
+      body: formData,
+    })
   },
 
   getTags() {
@@ -253,7 +274,7 @@ export const api = {
       answer: string
       model: string
       tokens_used: number | null
-      sources: NoteSummary[]
+      sources: RAGSource[]
     }>('/chat/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

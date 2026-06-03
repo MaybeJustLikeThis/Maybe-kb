@@ -51,6 +51,16 @@ class NoteDetail(NoteBase):
     attachments: list[str] = Field(default_factory=list)
 
 
+class RAGSource(BaseModel):
+    file_id: str
+    title: str
+    snippet: str
+    source_project: str | None = None
+    source_path: str | None = None
+    content_type: str = "markdown"
+    attachments: list[str] = Field(default_factory=list)
+
+
 class NoteCreateRequest(BaseModel):
     title: str = Field(..., max_length=300)
     content: str = Field(default="", max_length=500_000)
@@ -135,7 +145,7 @@ class ChatAnswer(BaseModel):
     answer: str
     model: str
     tokens_used: int | None = None
-    sources: list[NoteSummary] = Field(default_factory=list)
+    sources: list[RAGSource] = Field(default_factory=list)
 
 
 class ChatStreamEvent(BaseModel):
