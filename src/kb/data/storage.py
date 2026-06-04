@@ -120,12 +120,22 @@ def validate_vault_path(vault_path: Path, file_id: str) -> Path:
     return resolved
 
 
-def discover_notes(vault_path: Path) -> list[Path]:
-    """Find all .md files under notes/ directory."""
-    notes_dir = vault_path / "notes"
-    if not notes_dir.exists():
+def discover_notes(vault_path: Path, notes_dir: str = "notes") -> list[Path]:
+    """Find all .md files under the configured notes directory."""
+    vault_root = vault_path.resolve()
+    notes_path = vault_path / notes_dir
+    notes_root = notes_path.resolve()
+    if not notes_root.is_relative_to(vault_root):
+        raise ValueError(f"Configured notes directory escapes the vault: {notes_dir}")
+    if not notes_path.exists():
         return []
-    return sorted(notes_dir.rglob("*.md"))
+
+    discovered: list[Path] = []
+    for path in notes_path.rglob("*.md"):
+        resolved = path.resolve()
+        if resolved.is_relative_to(vault_root) and resolved.is_relative_to(notes_root):
+            discovered.append(path)
+    return sorted(discovered)
 
 
 def chunk_text(text: str, max_chars: int = 1000, overlap: int = 100) -> list[str]:

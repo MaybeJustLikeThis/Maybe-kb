@@ -1,7 +1,13 @@
 """Tests for Markdown storage layer."""
 import pytest
 from pathlib import Path
-from kb.data.storage import parse_markdown_file, write_markdown_file, chunk_text, make_slug
+from kb.data.storage import (
+    chunk_text,
+    discover_notes,
+    make_slug,
+    parse_markdown_file,
+    write_markdown_file,
+)
 
 
 SAMPLE_MARKDOWN = """\
@@ -35,6 +41,15 @@ date: 2026-01-15 10:00:00
 
 正文。
 """
+
+
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 1314:
+            pytest.skip(f"symlink creation is not permitted: {exc}")
+        raise
 
 
 def test_parse_hexo_frontmatter(tmp_path: Path):
@@ -176,3 +191,57 @@ def test_make_slug_sanitizes_category():
     assert cat == "a-b-c"
     assert "/" not in cat
     assert "\\" not in cat
+
+
+def test_discover_notes_scans_only_configured_notes_dir(tmp_path: Path):
+    vault = tmp_path / "vault"
+    configured = vault / "knowledge"
+    configured.mkdir(parents=True)
+    included = configured / "included.md"
+    included.write_text("# Included\n", encoding="utf-8")
+    default_note = vault / "notes" / "ignored.md"
+    default_note.parent.mkdir()
+    default_note.write_text("# Ignored\n", encoding="utf-8")
+    elsewhere = vault / "elsewhere.md"
+    elsewhere.write_text("# Ignored\n", encoding="utf-8")
+
+    assert discover_notes(vault, notes_dir="knowledge") == [included]
+
+
+def test_discover_notes_rejects_configured_dir_outside_vault(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    with pytest.raises(ValueError, match="escapes the vault"):
+        discover_notes(vault, notes_dir="../outside")
+
+
+def test_discover_notes_preserves_relative_vault_parse_behavior(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.chdir(tmp_path)
+    vault = Path("vault")
+    note_file = vault / "knowledge" / "note.md"
+    note_file.parent.mkdir(parents=True)
+    note_file.write_text("# Note\n", encoding="utf-8")
+
+    files = discover_notes(vault, notes_dir="knowledge")
+    note = parse_markdown_file(files[0], vault)
+
+    assert files == [note_file]
+    assert note.file_id == "knowledge/note.md"
+
+
+def test_discover_notes_ignores_symlinked_markdown_outside_vault(tmp_path: Path):
+    vault = tmp_path / "vault"
+    notes = vault / "knowledge"
+    notes.mkdir(parents=True)
+    inside = notes / "inside.md"
+    inside.write_text("# Inside\n", encoding="utf-8")
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+    unsafe_link = notes / "outside-link.md"
+    _symlink_or_skip(unsafe_link, outside)
+
+    assert discover_notes(vault, notes_dir="knowledge") == [inside]

@@ -1,7 +1,18 @@
 """Tests for attachment management."""
+import hashlib
+from datetime import datetime
 import pytest
 from pathlib import Path
 from kb.data.attachments import store_attachment
+
+
+def _symlink_or_skip(link: Path, target: Path, *, is_directory: bool) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=is_directory)
+    except OSError as exc:
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 1314:
+            pytest.skip(f"symlink creation is not permitted: {exc}")
+        raise
 
 
 def test_store_attachment(tmp_path: Path):
@@ -79,3 +90,64 @@ def test_store_preserves_extension(tmp_path: Path):
 
     result = store_attachment(source, vault_path)
     assert result.endswith(".pdf")
+
+
+def test_store_attachment_uses_configured_attachments_dir(tmp_path: Path):
+    source = tmp_path / "photo.png"
+    source.write_bytes(b"custom attachment path")
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    first = store_attachment(source, vault, attachments_dir="files")
+    second = store_attachment(source, vault, attachments_dir="files")
+
+    assert first == second
+    assert first.startswith("files/")
+    assert (vault / first).read_bytes() == b"custom attachment path"
+    assert not (vault / "attachments").exists()
+
+
+def test_store_attachment_rejects_final_destination_outside_vault_via_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls) -> datetime:
+            return cls(2026, 6, 4)
+
+    monkeypatch.setattr("kb.data.attachments.datetime", FrozenDateTime)
+    source = tmp_path / "photo.png"
+    data = b"outside destination"
+    source.write_bytes(data)
+    vault = tmp_path / "vault"
+    month_parent = vault / "attachments" / "2026"
+    month_parent.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _symlink_or_skip(month_parent / "06", outside, is_directory=True)
+    hash_name = hashlib.sha256(data).hexdigest()[:12]
+
+    with pytest.raises(ValueError, match="escapes the vault"):
+        store_attachment(source, vault)
+
+    assert not (outside / f"{hash_name}.png").exists()
+
+
+def test_store_attachment_does_not_dedupe_to_symlink_outside_vault(tmp_path: Path):
+    data = b"outside dedupe"
+    source = tmp_path / "photo.png"
+    source.write_bytes(data)
+    vault = tmp_path / "vault"
+    old_dir = vault / "attachments" / "old"
+    old_dir.mkdir(parents=True)
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(data)
+    hash_name = hashlib.sha256(data).hexdigest()[:12]
+    unsafe_link = old_dir / f"{hash_name}.png"
+    _symlink_or_skip(unsafe_link, outside, is_directory=False)
+
+    result = store_attachment(source, vault)
+
+    assert (vault / result).resolve().is_relative_to(vault.resolve())
+    assert result != unsafe_link.relative_to(vault).as_posix()

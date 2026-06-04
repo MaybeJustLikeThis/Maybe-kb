@@ -9,6 +9,15 @@ import kb.core.markdown_assets as markdown_assets
 from kb.core.markdown_assets import collect_markdown_image_assets
 
 
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) == 1314:
+            pytest.skip(f"symlink creation is not permitted: {exc}")
+        raise
+
+
 def test_collect_relative_image_stores_attachment_and_rewrites_link(tmp_path: Path):
     """A relative Markdown image is copied to attachments and rewritten."""
     vault = tmp_path / "vault"
@@ -143,6 +152,129 @@ def test_collect_existing_attachment_link_rejects_traversal(tmp_path: Path):
     ]
 
 
+def test_collect_uses_configured_attachment_dir_for_storage_and_existing_links(
+    tmp_path: Path,
+):
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    (source_root / "diagram.png").write_bytes(b"diagram")
+    post = source_root / "post.md"
+    markdown = (
+        "![New](diagram.png)\n"
+        "![Stored](files/2026/06/existing.png)\n"
+        "![Traversal](files/../secret.png)\n"
+    )
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+        attachments_dir="files",
+    )
+
+    assert len(result.attachments) == 2
+    assert result.attachments[0].startswith("files/")
+    assert result.attachments[1] == "files/2026/06/existing.png"
+    assert (vault / result.attachments[0]).read_bytes() == b"diagram"
+    assert "![New](files/" in result.content
+    assert result.warnings == ["unsafe attachment path: files/../secret.png"]
+
+
+def test_collect_rejects_existing_configured_attachment_symlink_outside_vault(
+    tmp_path: Path,
+):
+    vault = tmp_path / "vault"
+    configured = vault / "files"
+    configured.mkdir(parents=True)
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"outside")
+    unsafe_link = configured / "outside.png"
+    _symlink_or_skip(unsafe_link, outside)
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    post = source_root / "post.md"
+    markdown = "![Stored](files/outside.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+        attachments_dir="files",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == []
+    assert result.warnings == ["unsafe attachment path: files/outside.png"]
+
+
+def test_collect_recognizes_existing_attachment_when_attachment_dir_is_dot(
+    tmp_path: Path,
+):
+    vault = tmp_path / "vault"
+    existing = vault / "2026" / "06" / "existing.png"
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(b"existing")
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    post = source_root / "post.md"
+    markdown = "![Stored](2026/06/existing.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+        attachments_dir=".",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == ["2026/06/existing.png"]
+    assert result.warnings == []
+
+
+def test_collect_stores_local_image_when_attachment_dir_is_dot(tmp_path: Path):
+    vault = tmp_path / "vault"
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    (source_root / "diagram.png").write_bytes(b"diagram")
+    post = source_root / "post.md"
+
+    result = collect_markdown_image_assets(
+        "![Diagram](diagram.png)\n",
+        source_file=post,
+        source_root=source_root,
+        vault=vault,
+        attachments_dir=".",
+    )
+
+    assert len(result.attachments) == 1
+    assert (vault / result.attachments[0]).read_bytes() == b"diagram"
+    assert result.content == f"![Diagram]({result.attachments[0]})\n"
+    assert result.warnings == []
+
+
+def test_collect_rejects_traversal_when_attachment_dir_is_dot(tmp_path: Path):
+    source_root = tmp_path / "blog"
+    source_root.mkdir()
+    post = source_root / "post.md"
+    markdown = "![Traversal](../secret.png)\n"
+
+    result = collect_markdown_image_assets(
+        markdown,
+        source_file=post,
+        source_root=source_root,
+        vault=tmp_path / "vault",
+        attachments_dir=".",
+    )
+
+    assert result.content == markdown
+    assert result.attachments == []
+    assert result.warnings == ["unsafe attachment path: ../secret.png"]
+
+
 def test_collect_existing_attachment_link_normalizes_windows_separators_for_metadata(
     tmp_path: Path,
 ):
@@ -256,7 +388,12 @@ def test_collect_store_failure_keeps_link_and_warns(
     post = source_root / "post.md"
     markdown = "![Diagram](diagram.png)\n"
 
-    def fail_store(_source: Path, _vault: Path) -> str:
+    def fail_store(
+        _source: Path,
+        _vault: Path,
+        *,
+        attachments_dir: str = "attachments",
+    ) -> str:
         raise OSError("disk full")
 
     monkeypatch.setattr(markdown_assets, "store_attachment", fail_store)

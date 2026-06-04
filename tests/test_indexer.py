@@ -8,6 +8,8 @@ import pytest
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider, EmbeddingResult
 from kb.data.vector import VectorRecord
+from kb.core.config import GeneralConfig, KBConfig
+from kb.core.context import AppContext
 from kb.core.models import Note
 from kb.core.indexer import index_files, index_vectors
 
@@ -238,6 +240,23 @@ def test_index_files_incremental_skip_unchanged(db: Database, tmp_path: Path):
     assert indexed == 0
 
 
+def test_index_files_indexes_only_configured_notes_dir(db: Database, tmp_path: Path):
+    vault = tmp_path
+    custom_note = vault / "knowledge" / "included.md"
+    custom_note.parent.mkdir()
+    custom_note.write_text("# Included\n", encoding="utf-8")
+    default_note = vault / "notes" / "ignored.md"
+    default_note.parent.mkdir()
+    default_note.write_text("# Ignored\n", encoding="utf-8")
+    db.initialize()
+
+    indexed, _ = index_files(vault, db, full=True, notes_dir="knowledge")
+
+    assert indexed == 1
+    assert db.get_note("knowledge/included.md") is not None
+    assert db.get_note("notes/ignored.md") is None
+
+
 def test_index_files_external_sources(db: Database, tmp_path: Path):
     """Index with external_sources copies .md files into vault/notes/ subdirectory."""
     vault = tmp_path
@@ -313,6 +332,97 @@ def test_index_files_external_sources_collects_relative_images(
     assert len(attachments) == 1
     assert attachments[0].startswith("attachments/")
     assert (vault / attachments[0]).read_bytes() == b"diagram"
+
+
+def test_index_files_external_sources_use_configured_vault_dirs(
+    db: Database,
+    tmp_path: Path,
+):
+    vault = tmp_path / "vault"
+    external = tmp_path / "blog"
+    external.mkdir()
+    (external / "diagram.png").write_bytes(b"diagram")
+    (external / "post.md").write_text(
+        "---\ntitle: Custom Dirs\ncategories: docs\n---\n\n"
+        "![Diagram](diagram.png)\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    indexed, _ = index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        notes_dir="knowledge",
+        attachments_dir="files",
+    )
+
+    assert indexed == 1
+    dest = vault / "knowledge" / "docs" / "post.md"
+    assert dest.exists()
+    assert "![Diagram](files/" in dest.read_text(encoding="utf-8")
+    attachments = db.get_attachments("knowledge/docs/post.md")
+    assert len(attachments) == 1
+    assert attachments[0].startswith("files/")
+    assert (vault / attachments[0]).read_bytes() == b"diagram"
+    assert not (vault / "notes").exists()
+    assert not (vault / "attachments").exists()
+
+
+def test_index_files_external_sources_support_relative_vault_paths(
+    db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.chdir(tmp_path)
+    vault = Path("vault")
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "post.md").write_text(
+        "---\ntitle: Relative Vault\ncategories: docs\n---\nBody\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    indexed, _ = index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        notes_dir="knowledge",
+    )
+
+    assert indexed == 1
+    assert db.get_note("knowledge/docs/post.md") is not None
+
+
+def test_index_files_external_category_cannot_escape_vault_when_notes_dir_is_dot(
+    db: Database,
+    tmp_path: Path,
+):
+    vault = tmp_path / "vault"
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "post.md").write_text(
+        "---\ntitle: Escape Attempt\ncategories: ..\n---\nBody\n",
+        encoding="utf-8",
+    )
+    db.initialize()
+
+    indexed, _ = index_files(
+        vault,
+        db,
+        full=True,
+        external_sources=[external],
+        notes_dir=".",
+    )
+
+    assert indexed == 1
+    assert not (tmp_path / "post.md").exists()
+    rows = db.list_notes()
+    assert len(rows) == 1
+    assert (vault / rows[0]["id"]).is_file()
 
 
 def test_index_files_external_sources_preserves_body_leading_whitespace(
@@ -528,6 +638,31 @@ def test_index_vectors_empty_changed_ids(db: Database, tmp_path: Path):
     assert count == 0
 
 
+def test_index_vectors_uses_configured_index_dir(
+    db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    paths: list[Path] = []
+
+    class TrackingVectorStore(FakeVectorStore):
+        def __init__(self, path: Path) -> None:
+            super().__init__()
+            paths.append(path)
+
+    monkeypatch.setattr("kb.core.indexer.VectorStore", TrackingVectorStore)
+    db.initialize()
+
+    assert index_vectors(
+        tmp_path,
+        db,
+        FakeEmbeddingProvider(),
+        set(),
+        index_dir=".index",
+    ) == 0
+    assert paths == [tmp_path / ".index" / "vectors.lance"]
+
+
 def test_index_note_vectors_upserts_single_note(db: Database, tmp_path: Path):
     """index_note_vectors embeds one DB note and upserts its chunks."""
     from kb.core.indexer import index_note_vectors
@@ -553,6 +688,34 @@ def test_index_note_vectors_upserts_single_note(db: Database, tmp_path: Path):
     assert store.records["notes/a.md"][0].id == "notes/a.md"
     assert store.records["notes/a.md"][0].text
     assert store.closed is False
+
+
+def test_index_note_vectors_uses_configured_index_dir_for_default_store(
+    db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from kb.core.indexer import index_note_vectors
+
+    paths: list[Path] = []
+
+    class TrackingVectorStore(FakeVectorStore):
+        def __init__(self, path: Path) -> None:
+            super().__init__()
+            paths.append(path)
+
+    monkeypatch.setattr("kb.core.indexer.VectorStore", TrackingVectorStore)
+    db.initialize()
+    db.upsert_note(Note(file_id="knowledge/a.md", title="A", content="body"))
+
+    assert index_note_vectors(
+        tmp_path,
+        db,
+        FakeEmbeddingProvider(),
+        "knowledge/a.md",
+        index_dir=".index",
+    ) == 1
+    assert paths == [tmp_path / ".index" / "vectors.lance"]
 
 
 def test_index_note_vectors_deletes_missing_note(db: Database, tmp_path: Path):
@@ -629,3 +792,81 @@ def test_index_files_full_removes_missing(db: Database, tmp_path: Path):
     index_files(vault, db, full=True)
 
     assert db.get_note("notes/ghost.md") is None
+
+
+def test_index_files_propagates_configured_index_dir(
+    db: Database,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    note = tmp_path / "knowledge" / "note.md"
+    note.parent.mkdir()
+    note.write_text("# Note\n", encoding="utf-8")
+    captured: list[str] = []
+
+    def fake_index_vectors(
+        vault: Path,
+        database: Database,
+        provider: EmbeddingProvider,
+        changed_ids: set[str],
+        *,
+        index_dir: str = ".kb",
+    ) -> int:
+        captured.append(index_dir)
+        return 7
+
+    monkeypatch.setattr("kb.core.indexer.index_vectors", fake_index_vectors)
+    db.initialize()
+
+    result = index_files(
+        tmp_path,
+        db,
+        full=True,
+        embedding_provider=FakeEmbeddingProvider(),
+        notes_dir="knowledge",
+        index_dir=".index",
+    )
+
+    assert result == (1, 7)
+    assert captured == [".index"]
+
+
+def test_app_context_uses_config_index_path_unless_vault_is_overridden(tmp_path: Path):
+    class ConfigWithDistinctIndexPath(KBConfig):
+        @property
+        def index_path(self) -> Path:
+            return self.vault_path / "config-index"
+
+    vault = tmp_path / "vault"
+    config = ConfigWithDistinctIndexPath(
+        vault_path=vault,
+        general=GeneralConfig(index_dir=".index"),
+    )
+
+    default_context = AppContext.from_config(
+        config,
+        with_embedding=False,
+        with_llm=False,
+    )
+    try:
+        assert default_context.db._path == config.index_path / "kb.db"
+        assert default_context.vector_store is not None
+        assert default_context.vector_store._path == config.index_path / "vectors.lance"
+        assert config.index_path.is_dir()
+    finally:
+        default_context.close()
+
+    override_context = AppContext.from_config(
+        config,
+        vault=config.vault_path,
+        with_embedding=False,
+        with_llm=False,
+    )
+    try:
+        override_index = config.vault_path / config.general.index_dir
+        assert override_context.db._path == override_index / "kb.db"
+        assert override_context.vector_store is not None
+        assert override_context.vector_store._path == override_index / "vectors.lance"
+        assert override_index.is_dir()
+    finally:
+        override_context.close()

@@ -13,29 +13,44 @@ def _content_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()[:12]
 
 
-def store_attachment(source: Path, vault_path: Path) -> str:
+def store_attachment(
+    source: Path,
+    vault_path: Path,
+    *,
+    attachments_dir: str = ATTACHMENTS_DIR,
+) -> str:
     """Store an attachment file, returning its relative path.
 
     Deduplicates by content hash: same content -> same stored file.
-    Uses date-based subdirectory: attachments/YYYY/MM/{hash}{ext}
+    Uses date-based subdirectory: {attachments_dir}/YYYY/MM/{hash}{ext}
     """
     data = source.read_bytes()
     ext = source.suffix.lower()
     hash_name = _content_hash(data)
 
-    existing_path = _find_existing_attachment(vault_path, hash_name, ext, data)
+    attachments_root = _resolve_attachments_root(vault_path, attachments_dir)
+    existing_path = _find_existing_attachment(
+        vault_path,
+        hash_name,
+        ext,
+        data,
+        attachments_dir=attachments_dir,
+    )
     if existing_path is not None:
         return existing_path
 
     now = datetime.now()
-    rel_path = f"{ATTACHMENTS_DIR}/{now.year}/{now.month:02d}/{hash_name}{ext}"
+    dest = attachments_root / str(now.year) / f"{now.month:02d}" / f"{hash_name}{ext}"
+    resolved_dest = _resolve_attachment_path(
+        dest,
+        vault_root=vault_path.resolve(),
+        attachments_root=attachments_root,
+    )
+    if not resolved_dest.exists():
+        resolved_dest.parent.mkdir(parents=True, exist_ok=True)
+        resolved_dest.write_bytes(data)
 
-    dest = vault_path / rel_path
-    if not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-
-    return rel_path
+    return resolved_dest.relative_to(vault_path.resolve()).as_posix()
 
 
 def _find_existing_attachment(
@@ -43,14 +58,49 @@ def _find_existing_attachment(
     hash_name: str,
     ext: str,
     data: bytes,
+    *,
+    attachments_dir: str = ATTACHMENTS_DIR,
 ) -> str | None:
-    attachments_root = vault_path / ATTACHMENTS_DIR
+    vault_root = vault_path.resolve()
+    attachments_root = _resolve_attachments_root(vault_path, attachments_dir)
     if not attachments_root.exists():
         return None
 
     matches = sorted(attachments_root.rglob(f"{hash_name}{ext}"))
     for path in matches:
-        if path.is_file() and path.read_bytes() == data:
-            return path.relative_to(vault_path).as_posix()
+        try:
+            resolved_path = _resolve_attachment_path(
+                path,
+                vault_root=vault_root,
+                attachments_root=attachments_root,
+            )
+        except ValueError:
+            continue
+        if resolved_path.is_file() and resolved_path.read_bytes() == data:
+            return resolved_path.relative_to(vault_root).as_posix()
 
     return None
+
+
+def _resolve_attachments_root(vault_path: Path, attachments_dir: str) -> Path:
+    vault_root = vault_path.resolve()
+    attachments_root = (vault_path / attachments_dir).resolve()
+    if not attachments_root.is_relative_to(vault_root):
+        raise ValueError(
+            f"Configured attachments directory escapes the vault: {attachments_dir}"
+        )
+    return attachments_root
+
+
+def _resolve_attachment_path(
+    path: Path,
+    *,
+    vault_root: Path,
+    attachments_root: Path,
+) -> Path:
+    resolved = path.resolve()
+    if not resolved.is_relative_to(vault_root):
+        raise ValueError(f"Attachment path escapes the vault: {path}")
+    if not resolved.is_relative_to(attachments_root):
+        raise ValueError(f"Attachment path escapes the configured directory: {path}")
+    return resolved

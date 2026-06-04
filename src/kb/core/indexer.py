@@ -90,16 +90,23 @@ def index_files(
     embedding_provider: EmbeddingProvider | None = None,
     external_sources: list[Path] | None = None,
     source_project: str | None = None,
+    notes_dir: str = "notes",
+    attachments_dir: str = "attachments",
+    index_dir: str = ".kb",
 ) -> tuple[int, int]:
     """Index notes into database. Returns (fts5_count, vector_count).
 
     If external_sources is provided, .md files from those directories are
-    synced into vault/notes/ before indexing (new files only, no overwrite).
+    synced into the configured notes directory before indexing.
     source_project is injected into synced files that lack it.
     """
     if external_sources:
-        notes_dir = vault / "notes"
-        notes_dir.mkdir(exist_ok=True)
+        vault_root = vault.resolve()
+        notes_root = vault / notes_dir
+        resolved_notes_root = notes_root.resolve()
+        if not resolved_notes_root.is_relative_to(vault_root):
+            raise ValueError(f"Configured notes directory escapes the vault: {notes_dir}")
+        notes_root.mkdir(parents=True, exist_ok=True)
         for src_dir in external_sources:
             if not src_dir.is_dir():
                 continue
@@ -110,12 +117,35 @@ def index_files(
                 except Exception:
                     cat = "未分类"
                 cat = cat.replace("/", "-").replace("\\", "-")
-                category_dir = notes_dir / cat
+                if cat in {".", ".."}:
+                    cat = "未分类"
+                category_dir = notes_root / cat
+                resolved_category_dir = category_dir.resolve()
+                if not _is_within_roots(
+                    resolved_category_dir,
+                    resolved_notes_root,
+                    vault_root,
+                ):
+                    raise ValueError(f"External source category escapes notes root: {cat}")
                 category_dir.mkdir(exist_ok=True)
                 dest = category_dir / f.name
+                resolved_dest = dest.resolve()
+                if not _is_within_roots(
+                    resolved_dest,
+                    resolved_notes_root,
+                    vault_root,
+                ):
+                    raise ValueError(f"External source destination escapes notes root: {dest}")
                 # Remove stale copies of this file that ended up in a different category
-                for existing in notes_dir.rglob(f.name):
-                    if existing.resolve() != dest.resolve():
+                for existing in notes_root.rglob(f.name):
+                    resolved_existing = existing.resolve()
+                    if not _is_within_roots(
+                        resolved_existing,
+                        resolved_notes_root,
+                        vault_root,
+                    ):
+                        continue
+                    if resolved_existing != resolved_dest:
                         existing.unlink()
                 src_content = f.read_text(encoding="utf-8")
                 collected = collect_markdown_image_assets(
@@ -123,6 +153,7 @@ def index_files(
                     source_file=f,
                     source_root=src_dir,
                     vault=vault,
+                    attachments_dir=attachments_dir,
                 )
                 src_content = _merge_external_frontmatter(
                     collected.content,
@@ -136,7 +167,7 @@ def index_files(
 
     all_hashes = db.get_all_hashes()
     existing = {} if full else all_hashes
-    files = discover_notes(vault)
+    files = discover_notes(vault, notes_dir=notes_dir)
 
     # Dedup: remove files with identical content but different paths
     seen_hashes: dict[str, Path] = {}
@@ -178,9 +209,19 @@ def index_files(
 
     vector_count = 0
     if embedding_provider is not None:
-        vector_count = index_vectors(vault, db, embedding_provider, changed_ids)
+        vector_count = index_vectors(
+            vault,
+            db,
+            embedding_provider,
+            changed_ids,
+            index_dir=index_dir,
+        )
 
     return indexed, vector_count
+
+
+def _is_within_roots(path: Path, *roots: Path) -> bool:
+    return all(path.is_relative_to(root) for root in roots)
 
 
 def index_note_vectors(
@@ -190,6 +231,7 @@ def index_note_vectors(
     file_id: str,
     *,
     vector_store: VectorStore | None = None,
+    index_dir: str = ".kb",
 ) -> int:
     """Generate embeddings for one note and upsert LanceDB chunks.
 
@@ -197,7 +239,7 @@ def index_note_vectors(
     are deleted and 0 is returned.
     """
     owns_store = vector_store is None
-    store = vector_store or VectorStore(vault / ".kb" / "vectors.lance")
+    store = vector_store or VectorStore(vault / index_dir / "vectors.lance")
 
     try:
         row = db.get_note(file_id)
@@ -233,13 +275,15 @@ def index_vectors(
     db: Database,
     provider: EmbeddingProvider,
     changed_ids: set[str],
+    *,
+    index_dir: str = ".kb",
 ) -> int:
     """Generate embeddings for changed notes and update LanceDB.
 
     Only processes notes whose file_hash changed.
     Returns number of vector records indexed.
     """
-    store = VectorStore(vault / ".kb" / "vectors.lance")
+    store = VectorStore(vault / index_dir / "vectors.lance")
     indexed = 0
 
     try:

@@ -45,9 +45,14 @@ class AppContext:
             with_embedding: If False, skip embedding provider init.
             with_llm: If False, skip LLM provider init.
         """
-        vault = vault or config.vault_path
+        if vault is None:
+            vault = config.vault_path
+            index_path = config.index_path
+        else:
+            index_path = vault / config.general.index_dir
+        index_path.mkdir(parents=True, exist_ok=True)
 
-        db_path = vault / ".kb" / "kb.db"
+        db_path = index_path / "kb.db"
         db = Database(db_path)
         db.initialize()
 
@@ -59,7 +64,7 @@ class AppContext:
         if with_llm and config.llm:
             llm = create_llm_provider(config.llm)
 
-        vector_store = VectorStore(vault / ".kb" / "vectors.lance")
+        vector_store = VectorStore(index_path / "vectors.lance")
 
         return cls(
             vault=vault,

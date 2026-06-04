@@ -32,6 +32,7 @@ def collect_markdown_image_assets(
     source_file: Path,
     source_root: Path,
     vault: Path,
+    attachments_dir: str = "attachments",
 ) -> CollectedMarkdownAssets:
     """Store local Markdown images in the vault and rewrite their links."""
     attachments: list[str] = []
@@ -51,13 +52,33 @@ def collect_markdown_image_assets(
         if _is_ignored_target(target):
             return match.group(0)
 
-        attachment_path = _normalize_attachment_path(target)
+        attachment_path = _normalize_attachment_path(
+            target,
+            attachments_dir=attachments_dir,
+        )
         if attachment_path is not None:
             if not attachment_path:
                 warnings.append(f"unsafe attachment path: {target}")
+                return match.group(0)
+            vault_root = vault.resolve()
+            attachments_root = (vault / attachments_dir).resolve()
+            candidate = (vault / attachment_path).resolve()
+            if (
+                not attachments_root.is_relative_to(vault_root)
+                or not candidate.is_relative_to(vault_root)
+                or not candidate.is_relative_to(attachments_root)
+            ):
+                warnings.append(f"unsafe attachment path: {target}")
+                return match.group(0)
+            if attachments_dir == ".":
+                if not candidate.is_file():
+                    attachment_path = None
             else:
                 _append_unique(attachments, attachment_path)
-            return match.group(0)
+                return match.group(0)
+            if attachment_path is not None:
+                _append_unique(attachments, attachment_path)
+                return match.group(0)
 
         resolved = _resolve_image(unquote(target), source_file, source_root, root)
         if resolved is None:
@@ -69,7 +90,11 @@ def collect_markdown_image_assets(
             return match.group(0)
 
         try:
-            rel_path = store_attachment(resolved, vault)
+            rel_path = store_attachment(
+                resolved,
+                vault,
+                attachments_dir=attachments_dir,
+            )
         except Exception as exc:
             warnings.append(f"failed to store image {target}: {exc}")
             return match.group(0)
@@ -147,9 +172,14 @@ def _is_ignored_target(target: str) -> bool:
     return target.lower().startswith(_IGNORED_PREFIXES)
 
 
-def _normalize_attachment_path(target: str) -> str | None:
+def _normalize_attachment_path(
+    target: str,
+    *,
+    attachments_dir: str = "attachments",
+) -> str | None:
     decoded = unquote(target).replace("\\", "/")
-    if not decoded.startswith("attachments/"):
+    namespace = posixpath.normpath(attachments_dir.replace("\\", "/"))
+    if namespace != "." and not decoded.startswith(f"{namespace}/"):
         return None
 
     normalized = posixpath.normpath(decoded)
@@ -159,7 +189,7 @@ def _normalize_attachment_path(target: str) -> str | None:
     normalized = normalized.replace("\\", "/")
     if normalized.startswith("../") or normalized == "..":
         return ""
-    if not normalized.startswith("attachments/"):
+    if namespace != "." and not normalized.startswith(f"{namespace}/"):
         return ""
 
     return normalized
