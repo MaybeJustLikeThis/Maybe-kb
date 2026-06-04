@@ -1,4 +1,8 @@
 """Tests for CLI commands."""
+from __future__ import annotations
+
+import tomllib
+import shutil
 import pytest
 from pathlib import Path
 from typer.testing import CliRunner
@@ -12,6 +16,28 @@ def kb_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a kb project directory and cd into it."""
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+def write_external_config(
+    project: Path,
+    vault: Path,
+    *,
+    watch_dir: Path | None = None,
+    watch_enabled: bool = True,
+) -> None:
+    watch_line = f'watch_dir = "{watch_dir.as_posix()}"\n' if watch_dir else ""
+    project.joinpath("config.toml").write_text(
+        "[general]\n"
+        f'vault_path = "{vault.as_posix()}"\n'
+        'notes_dir = "knowledge"\n'
+        'attachments_dir = "media"\n'
+        'index_dir = ".index"\n'
+        "\n"
+        "[server]\n"
+        f"watch_enabled = {str(watch_enabled).lower()}\n"
+        f"{watch_line}",
+        encoding="utf-8",
+    )
 
 
 def test_kb_init(kb_dir: Path):
@@ -311,3 +337,421 @@ def test_kb_add_rejects_empty_title(kb_dir: Path):
     assert result.exit_code != 0
     assert "title" in result.stdout.lower()
     assert not list((kb_dir / "notes").rglob("*.md"))
+
+
+def test_kb_init_import_existing_uses_selected_project_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    project = tmp_path / "project"
+    vault = tmp_path / "vault"
+    project.mkdir()
+    vault.joinpath("knowledge").mkdir(parents=True)
+    vault.joinpath("knowledge", "existing.md").write_text("# Existing\n", encoding="utf-8")
+    write_external_config(project, vault)
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda config: None)
+
+    result = runner.invoke(app, ["init", "--path", str(project), "--import-existing"])
+
+    assert result.exit_code == 0, result.output
+    assert vault.joinpath(".index", "kb.db").is_file()
+    assert vault.joinpath("media").is_dir()
+    assert not project.joinpath(".kb").exists()
+
+
+def test_kb_add_delete_and_tag_use_external_vault(kb_dir: Path):
+    vault = kb_dir / "external-vault"
+    write_external_config(kb_dir, vault)
+
+    added = runner.invoke(app, ["add", "External Note", "--tags", "one"])
+    note = next(vault.joinpath("knowledge").rglob("*.md"))
+    file_id = note.relative_to(vault).as_posix()
+    assert added.exit_code == 0, added.output
+    assert not kb_dir.joinpath("notes").exists()
+
+    tagged = runner.invoke(app, ["tag", file_id, "add", "--tags", "two"])
+    assert tagged.exit_code == 0, tagged.output
+    assert "two" in note.read_text(encoding="utf-8")
+
+    deleted = runner.invoke(app, ["delete", file_id, "--force"])
+    assert deleted.exit_code == 0, deleted.output
+    assert not note.exists()
+
+
+def test_kb_migrate_uses_external_vault_and_configured_notes_dir(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    vault = kb_dir / "external-vault"
+    note = vault / "knowledge" / "root.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        "---\ntitle: Root\ncategories: tech\n---\n\nBody.\n",
+        encoding="utf-8",
+    )
+    write_external_config(kb_dir, vault)
+    calls = []
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda config: None)
+    monkeypatch.setattr("kb.cli.index_files", lambda *args, **kwargs: calls.append((args, kwargs)) or (1, 0))
+
+    result = runner.invoke(app, ["migrate"])
+
+    assert result.exit_code == 0, result.output
+    assert not note.exists()
+    assert vault.joinpath("knowledge", "tech", "root.md").is_file()
+    assert calls[0][0][0] == vault.resolve()
+    assert calls[0][1]["notes_dir"] == "knowledge"
+    assert calls[0][1]["attachments_dir"] == "media"
+    assert calls[0][1]["index_dir"] == ".index"
+
+
+def test_kb_index_uses_external_vault_without_importing_watch_dir(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    vault = kb_dir / "external-vault"
+    watch_dir = kb_dir / "blog"
+    vault.mkdir()
+    watch_dir.mkdir()
+    write_external_config(kb_dir, vault, watch_dir=watch_dir)
+    calls = []
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda config: None)
+    monkeypatch.setattr("kb.cli.index_files", lambda *args, **kwargs: calls.append((args, kwargs)) or (0, 0))
+
+    result = runner.invoke(app, ["index"])
+
+    assert result.exit_code == 0, result.output
+    args, kwargs = calls[0]
+    assert args[0] == vault.resolve()
+    assert kwargs["notes_dir"] == "knowledge"
+    assert kwargs["attachments_dir"] == "media"
+    assert kwargs["index_dir"] == ".index"
+    assert "external_sources" not in kwargs
+
+
+def test_kb_serve_watches_notes_and_indexes_configured_vault(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    vault = kb_dir / "external-vault"
+    notes = vault / "knowledge"
+    notes.mkdir(parents=True)
+    write_external_config(kb_dir, vault)
+    index_calls = []
+    watcher_calls = []
+
+    class Observer:
+        def stop(self):
+            pass
+
+        def join(self):
+            pass
+
+    def fake_start_watcher(path, callback, debounce_ms):
+        watcher_calls.append((path, callback, debounce_ms))
+        return Observer()
+
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda config: None)
+    monkeypatch.setattr("kb.server.create_app", lambda config: object())
+    monkeypatch.setattr("kb.core.watcher.start_watcher", fake_start_watcher)
+    monkeypatch.setattr("kb.cli.index_files", lambda *args, **kwargs: index_calls.append((args, kwargs)) or (0, 0))
+    monkeypatch.setattr("uvicorn.run", lambda *args, **kwargs: None)
+
+    result = runner.invoke(app, ["serve"])
+    watcher_calls[0][1]()
+
+    assert result.exit_code == 0, result.output
+    assert watcher_calls[0][0] == notes.resolve()
+    assert len(index_calls) == 2
+    for args, kwargs in index_calls:
+        assert args[0] == vault.resolve()
+        assert kwargs["notes_dir"] == "knowledge"
+        assert kwargs["attachments_dir"] == "media"
+        assert kwargs["index_dir"] == ".index"
+        assert "external_sources" not in kwargs
+
+
+def test_kb_serve_does_not_default_watch_when_disabled(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    vault = kb_dir / "external-vault"
+    vault.joinpath("knowledge").mkdir(parents=True)
+    write_external_config(kb_dir, vault, watch_enabled=False)
+    monkeypatch.setattr("kb.server.create_app", lambda config: object())
+    monkeypatch.setattr(
+        "kb.core.watcher.start_watcher",
+        lambda *args, **kwargs: pytest.fail("watcher should not start"),
+    )
+    monkeypatch.setattr("uvicorn.run", lambda *args, **kwargs: None)
+
+    result = runner.invoke(app, ["serve"])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_kb_obsidian_init_vault_copies_and_updates_config(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = kb_dir / "Obsidian Vault"
+    source_notes.joinpath("topic").mkdir(parents=True)
+    source_attachments.mkdir()
+    source_notes.joinpath("topic", "note.md").write_text("# Note\n", encoding="utf-8")
+    source_attachments.joinpath("image.png").write_bytes(b"image")
+    kb_dir.joinpath("config.toml").write_text(
+        "# keep this comment\n"
+        "[general]\n"
+        'vault_path = "."\n'
+        'unknown = "keep"\n\n'
+        "[search]\nmax_results = 77\n\n"
+        "[server]\n"
+        'watch_dir = "D:/blog/source"\n\n'
+        "[sources.blog]\nlabel = \"Blog\"\n",
+        encoding="utf-8",
+    )
+    index_calls = []
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda config: None)
+    monkeypatch.setattr("kb.cli.index_files", lambda *args, **kwargs: index_calls.append((args, kwargs)) or (1, 0))
+
+    result = runner.invoke(
+        app,
+        [
+            "obsidian",
+            "init-vault",
+            "--target",
+            str(target),
+            "--from-notes",
+            str(source_notes),
+            "--from-attachments",
+            str(source_attachments),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert source_notes.joinpath("topic", "note.md").is_file()
+    assert source_attachments.joinpath("image.png").is_file()
+    assert target.joinpath("notes", "topic", "note.md").is_file()
+    assert target.joinpath("attachments", "image.png").read_bytes() == b"image"
+    assert target.joinpath(".obsidian").is_dir()
+    assert index_calls[0][0][0] == target.resolve()
+    text = kb_dir.joinpath("config.toml").read_text(encoding="utf-8")
+    data = tomllib.loads(text)
+    assert "# keep this comment" in text
+    assert data["search"]["max_results"] == 77
+    assert data["server"]["watch_dir"] == "D:/blog/source"
+    assert data["sources"]["blog"]["label"] == "Blog"
+    assert data["general"]["unknown"] == "keep"
+    assert data["general"]["vault_path"] == target.resolve().as_posix()
+    assert data["general"]["notes_dir"] == "notes"
+    assert data["general"]["attachments_dir"] == "attachments"
+    assert data["general"]["index_dir"] == ".kb"
+    assert data["obsidian"] == {
+        "enabled": True,
+        "vault_name": target.name,
+        "vault_path": target.resolve().as_posix(),
+        "open_uri_strategy": "file",
+    }
+
+
+def test_kb_obsidian_init_vault_skip_index_and_idempotent(kb_dir: Path):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = kb_dir / "vault"
+    source_notes.mkdir()
+    source_attachments.mkdir()
+    source_notes.joinpath("note.md").write_text("# Same\n", encoding="utf-8")
+
+    args = [
+        "obsidian",
+        "init-vault",
+        "--target",
+        str(target),
+        "--from-notes",
+        str(source_notes),
+        "--from-attachments",
+        str(source_attachments),
+        "--skip-index",
+    ]
+    first = runner.invoke(app, args)
+    second = runner.invoke(app, args)
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert not target.joinpath(".kb").exists()
+    assert target.joinpath("notes", "note.md").read_text(encoding="utf-8") == "# Same\n"
+
+
+def test_kb_obsidian_init_vault_refuses_conflict_without_changing_config(kb_dir: Path):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = kb_dir / "vault"
+    source_notes.mkdir()
+    source_attachments.mkdir()
+    target.joinpath("notes").mkdir(parents=True)
+    source_notes.joinpath("note.md").write_text("# Source\n", encoding="utf-8")
+    target.joinpath("notes", "note.md").write_text("# Conflict\n", encoding="utf-8")
+    config_path = kb_dir / "config.toml"
+    original_config = "[general]\nvault_path = \".\"\n"
+    config_path.write_text(original_config, encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "obsidian",
+            "init-vault",
+            "--target",
+            str(target),
+            "--from-notes",
+            str(source_notes),
+            "--from-attachments",
+            str(source_attachments),
+            "--skip-index",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "conflict" in result.output.lower()
+    assert config_path.read_text(encoding="utf-8") == original_config
+    assert target.joinpath("notes", "note.md").read_text(encoding="utf-8") == "# Conflict\n"
+
+
+def test_kb_obsidian_init_vault_preflights_parent_path_conflicts(kb_dir: Path):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = kb_dir / "vault"
+    source_notes.joinpath("z").mkdir(parents=True)
+    source_attachments.mkdir()
+    source_notes.joinpath("a.md").write_text("# A\n", encoding="utf-8")
+    source_notes.joinpath("z", "note.md").write_text("# Nested\n", encoding="utf-8")
+    target.joinpath("notes").mkdir(parents=True)
+    target.joinpath("notes", "z").write_text("not a directory", encoding="utf-8")
+    config_path = kb_dir / "config.toml"
+    original_config = "[general]\nvault_path = \".\"\n"
+    config_path.write_text(original_config, encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "obsidian",
+            "init-vault",
+            "--target",
+            str(target),
+            "--from-notes",
+            str(source_notes),
+            "--from-attachments",
+            str(source_attachments),
+            "--skip-index",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "conflict" in result.output.lower()
+    assert not target.joinpath("notes", "a.md").exists()
+    assert config_path.read_text(encoding="utf-8") == original_config
+
+
+def test_kb_obsidian_init_vault_refuses_target_inside_sources(kb_dir: Path):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = source_notes / "vault"
+    source_notes.mkdir()
+    source_attachments.mkdir()
+    source_notes.joinpath("note.md").write_text("# Note\n", encoding="utf-8")
+    config_path = kb_dir / "config.toml"
+    original_config = "[general]\nvault_path = \".\"\n"
+    config_path.write_text(original_config, encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "obsidian",
+            "init-vault",
+            "--target",
+            str(target),
+            "--from-notes",
+            str(source_notes),
+            "--from-attachments",
+            str(source_attachments),
+            "--skip-index",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "inside" in result.output.lower()
+    assert not target.exists()
+    assert config_path.read_text(encoding="utf-8") == original_config
+
+
+def test_kb_obsidian_init_vault_cleans_partial_copies_on_failure(
+    kb_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source_notes = kb_dir / "old-notes"
+    source_attachments = kb_dir / "old-attachments"
+    target = kb_dir / "vault"
+    source_notes.mkdir()
+    source_attachments.mkdir()
+    first = source_notes / "a.md"
+    second = source_notes / "b.md"
+    first.write_text("# A\n", encoding="utf-8")
+    second.write_text("# B\n", encoding="utf-8")
+    config_path = kb_dir / "config.toml"
+    original_config = "[general]\nvault_path = \".\"\n"
+    config_path.write_text(original_config, encoding="utf-8")
+    real_copy2 = shutil.copy2
+    calls = 0
+
+    def flaky_copy2(source: Path, destination: Path):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text("partial", encoding="utf-8")
+            raise OSError("simulated copy failure")
+        return real_copy2(source, destination)
+
+    monkeypatch.setattr("kb.cli.shutil.copy2", flaky_copy2)
+
+    result = runner.invoke(
+        app,
+        [
+            "obsidian",
+            "init-vault",
+            "--target",
+            str(target),
+            "--from-notes",
+            str(source_notes),
+            "--from-attachments",
+            str(source_attachments),
+            "--skip-index",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "copy failure" in result.output
+    assert not target.joinpath("notes", "a.md").exists()
+    assert not target.joinpath("notes", "b.md").exists()
+    assert config_path.read_text(encoding="utf-8") == original_config
+
+
+def test_kb_mcp_path_loads_project_config(kb_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    vault = kb_dir / "external-vault"
+    write_external_config(kb_dir, vault)
+    configs = []
+
+    class Server:
+        def run(self):
+            pass
+
+    monkeypatch.setattr(
+        "kb.mcp_server.create_mcp_server",
+        lambda config: configs.append(config) or Server(),
+    )
+
+    result = runner.invoke(app, ["mcp", "--path", str(kb_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert configs[0].vault_path == vault.resolve()
