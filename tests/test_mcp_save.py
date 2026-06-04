@@ -2,7 +2,15 @@
 import anyio
 import pytest
 from pathlib import Path
-from kb.core.config import KBConfig, EmbeddingConfig, LLMConfig, SearchConfig, RAGConfig, ServerConfig
+from kb.core.config import (
+    EmbeddingConfig,
+    GeneralConfig,
+    KBConfig,
+    LLMConfig,
+    RAGConfig,
+    SearchConfig,
+    ServerConfig,
+)
 
 
 def _prepare_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,6 +192,57 @@ def test_kb_add_rejects_empty_title(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     anyio.run(_run)
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "payload"),
+    [
+        (
+            "kb_add",
+            {
+                "title": "Custom MCP Add",
+                "content": "Add body",
+                "category": "tech",
+            },
+        ),
+        (
+            "kb_save",
+            {
+                "title": "Custom MCP Save",
+                "content": "Save body",
+                "source_project": "manual",
+                "category": "tech",
+            },
+        ),
+    ],
+)
+def test_mcp_writes_to_custom_notes_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    payload: dict,
+):
+    """MCP add and save write beneath the configured notes root."""
+    monkeypatch.chdir(tmp_path)
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        general=GeneralConfig(notes_dir="knowledge", index_dir="state/index"),
+        embedding=None,
+        llm=None,
+    )
+    from kb.mcp_server import create_mcp_server
+    mcp = create_mcp_server(config)
+
+    async def _run():
+        result = await mcp.call_tool(tool_name, payload)
+        content_list = result[0] if isinstance(result, tuple) else result
+        data = content_list[0].text if hasattr(content_list[0], "text") else str(content_list[0])
+        import json as _json
+        summary = _json.loads(data)
+        assert summary["file_id"].startswith("knowledge/tech/")
+        assert (tmp_path / summary["file_id"]).is_file()
+
+    anyio.run(_run)
+
+
 def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """kb_save best-effort indexes the created note and returns vector count."""
     _prepare_vault(tmp_path, monkeypatch)
@@ -201,19 +260,30 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
         def dimension(self):
             return 3
 
-    calls: list[str] = []
+    calls: list[tuple[str, str, object]] = []
 
     def fake_ensure_embedding(self):
         return FakeEmbedding()
 
-    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
-        calls.append(file_id)
+    def fake_index_note_vectors(
+        vault,
+        db,
+        provider,
+        file_id,
+        *,
+        vector_store=None,
+        index_dir=".kb",
+    ):
+        calls.append((file_id, index_dir, vector_store))
         return 1
 
     monkeypatch.setattr("kb.core.context.AppContext.ensure_embedding", fake_ensure_embedding)
     monkeypatch.setattr("kb.mcp_server.index_note_vectors", fake_index_note_vectors)
 
-    config = KBConfig(vault_path=tmp_path.resolve())
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        general=GeneralConfig(index_dir="state/index"),
+    )
     from kb.mcp_server import create_mcp_server
     mcp = create_mcp_server(config)
 
@@ -229,6 +299,6 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
         import json as _json
         payload = _json.loads(data)
         assert payload["indexed_vectors"] == 1
-        assert calls == [payload["file_id"]]
+        assert calls == [(payload["file_id"], "state/index", mcp._kb_context.vector_store)]
 
     anyio.run(_run)

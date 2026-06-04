@@ -15,6 +15,7 @@ def ingest(
     db: Database,
     *,
     source_config: SourceConfig | None = None,
+    notes_dir: str = "notes",
 ) -> Note:
     """Validate, enrich, and persist an ingest request."""
     if not request.title.strip():
@@ -46,4 +47,5 @@ def ingest(
         content_type=request.content_type,
         attachments=request.attachments,
         extra_frontmatter=request.extra_frontmatter,
+        notes_dir=notes_dir,
     )

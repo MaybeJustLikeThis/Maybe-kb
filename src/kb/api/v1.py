@@ -38,6 +38,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             ctx.embedding,
             file_id,
             vector_store=ctx.vector_store,
+            index_dir=ctx.index_dir,
         )
 
     @router.get("/notes")
@@ -82,6 +83,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                     content_type=body.content_type,
                 ),
                 ctx.vault, ctx.db,
+                notes_dir=ctx.notes_dir,
             )
             _index_note_if_possible(note.file_id)
         except ValueError:
@@ -178,6 +180,9 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 ctx.db,
                 full=True,
                 embedding_provider=ctx.embedding,
+                notes_dir=ctx.notes_dir,
+                attachments_dir=ctx.attachments_dir,
+                index_dir=ctx.index_dir,
             )
         except Exception:
             return responses.operation_failed(
@@ -199,7 +204,11 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 content = await file.read()
                 tmp.write(content)
                 tmp_path = Path(tmp.name)
-            rel_path = store_attachment(tmp_path, ctx.vault)
+            rel_path = store_attachment(
+                tmp_path,
+                ctx.vault,
+                attachments_dir=ctx.attachments_dir,
+            )
         except Exception:
             return responses.operation_failed(
                 "ATTACHMENT_UPLOAD_FAILED",

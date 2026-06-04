@@ -45,6 +45,7 @@ def create_mcp_server(config: KBConfig):
                 provider,
                 file_id,
                 vector_store=ctx.vector_store,
+                index_dir=ctx.index_dir,
             )
             return count, None
         except Exception as exc:
@@ -151,6 +152,7 @@ def create_mcp_server(config: KBConfig):
                 ),
                 vault, db,
                 source_config=src_cfg,
+                notes_dir=ctx.notes_dir,
             )
         except ValueError as e:
             return {"error": str(e)}
@@ -213,6 +215,7 @@ def create_mcp_server(config: KBConfig):
                 ),
                 vault, db,
                 source_config=src_cfg,
+                notes_dir=ctx.notes_dir,
             )
         except ValueError as e:
             return {"error": str(e)}

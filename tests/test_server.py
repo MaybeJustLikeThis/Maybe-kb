@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
 from kb.server import create_app
-from kb.core.config import KBConfig, ServerConfig
+from kb.core.config import GeneralConfig, KBConfig, ServerConfig
 
 
 @pytest.fixture
@@ -235,6 +235,60 @@ def test_upload_attachment(client):
     assert "path" in data
     assert data["path"].startswith("attachments/")
     assert data["path"].endswith(".txt")
+
+
+def test_legacy_routes_use_configured_vault_subpaths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Legacy create, rebuild, upload, and stats use configured vault paths."""
+    from io import BytesIO
+
+    index_calls: list[dict] = []
+
+    def fake_index_files(vault, db, **kwargs):
+        index_calls.append(kwargs)
+        return 1, 0
+
+    monkeypatch.setattr("kb.core.indexer.index_files", fake_index_files)
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        general=GeneralConfig(
+            notes_dir="knowledge",
+            attachments_dir="media",
+            index_dir="state/index",
+        ),
+        embedding=None,
+        llm=None,
+        server=ServerConfig(host="127.0.0.1", port=8420),
+    )
+    custom_client = TestClient(create_app(config))
+
+    created = custom_client.post("/api/notes", json={
+        "title": "Legacy Custom Paths",
+        "content": "Body",
+        "category": "tech",
+    }).json()
+    upload = custom_client.post(
+        "/api/attachments",
+        files={"file": ("sample.txt", BytesIO(b"hello"), "text/plain")},
+    ).json()
+    stats = custom_client.get("/api/attachments/stats").json()
+    rebuild = custom_client.post("/api/index")
+
+    assert created["file_id"].startswith("knowledge/tech/")
+    assert (tmp_path / created["file_id"]).is_file()
+    assert upload["path"].startswith("media/")
+    assert (tmp_path / upload["path"]).is_file()
+    assert stats == {"count": 1}
+    assert rebuild.status_code == 200
+    assert index_calls == [{
+        "full": True,
+        "embedding_provider": None,
+        "notes_dir": "knowledge",
+        "attachments_dir": "media",
+        "index_dir": "state/index",
+    }]
 
 
 def test_semantic_search_requires_query(client):

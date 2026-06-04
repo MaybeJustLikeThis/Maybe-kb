@@ -32,6 +32,59 @@ def test_create_note_writes_file_and_indexes(tmp_path: Path):
     db.close()
 
 
+def test_create_note_uses_custom_notes_dir(tmp_path: Path):
+    """create_note writes beneath the configured notes root."""
+    vault = tmp_path
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    note = create_note(
+        vault,
+        db,
+        "Custom Root",
+        "content",
+        category="tech",
+        notes_dir="knowledge/notes",
+    )
+
+    assert note.file_id.startswith("knowledge/notes/tech/")
+    assert (vault / note.file_id).is_file()
+    assert not (vault / "notes").exists()
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("notes_dir", "category"),
+    [
+        ("../outside", "tech"),
+        ("knowledge/notes", ".."),
+    ],
+)
+def test_create_note_rejects_paths_outside_configured_notes_root(
+    tmp_path: Path,
+    notes_dir: str,
+    category: str,
+):
+    """create_note blocks configured roots and categories that escape containment."""
+    vault = tmp_path
+    (vault / ".kb").mkdir()
+    db = Database(vault / ".kb" / "kb.db")
+    db.initialize()
+
+    with pytest.raises(ValueError):
+        create_note(
+            vault,
+            db,
+            "Escape Attempt",
+            "content",
+            category=category,
+            notes_dir=notes_dir,
+        )
+
+    db.close()
+
+
 def test_create_note_slug_collision(tmp_path: Path):
     """Second note with same title gets -2 suffix."""
     vault = tmp_path

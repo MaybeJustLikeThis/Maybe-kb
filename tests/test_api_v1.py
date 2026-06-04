@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from kb.core.config import KBConfig, ServerConfig
+from kb.core.config import GeneralConfig, KBConfig, ServerConfig
 from kb.server import create_app
 
 
@@ -274,7 +274,15 @@ def test_v1_create_note_updates_vector_index(
     """Creating a note attempts single-note vector indexing when embedding exists."""
     calls: list[str] = []
 
-    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
+    def fake_index_note_vectors(
+        vault,
+        db,
+        provider,
+        file_id,
+        *,
+        vector_store=None,
+        index_dir=".kb",
+    ):
         calls.append(file_id)
         return 1
 
@@ -298,7 +306,15 @@ def test_v1_update_note_updates_vector_index(
     """Updating a note attempts single-note vector indexing when embedding exists."""
     calls: list[str] = []
 
-    def fake_index_note_vectors(vault, db, provider, file_id, *, vector_store=None):
+    def fake_index_note_vectors(
+        vault,
+        db,
+        provider,
+        file_id,
+        *,
+        vector_store=None,
+        index_dir=".kb",
+    ):
         calls.append(file_id)
         return 1
 
@@ -330,6 +346,90 @@ def test_v1_attachment_upload_returns_envelope(client: TestClient) -> None:
     body = response.json()
     assert_success_envelope(body)
     assert body["data"]["path"].startswith("attachments/")
+
+
+def test_v1_uses_configured_vault_subpaths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """V1 create, rebuild, upload, and single-note indexing use configured paths."""
+    from io import BytesIO
+
+    rebuild_calls: list[dict] = []
+    note_index_calls: list[dict] = []
+
+    def fake_create_embedding_provider(config):
+        return object()
+
+    def fake_index_files(vault, db, **kwargs):
+        rebuild_calls.append(kwargs)
+        return 1, 0
+
+    def fake_index_note_vectors(
+        vault,
+        db,
+        provider,
+        file_id,
+        *,
+        vector_store=None,
+        index_dir=".kb",
+    ):
+        note_index_calls.append({
+            "file_id": file_id,
+            "vector_store": vector_store,
+            "index_dir": index_dir,
+        })
+        return 0
+
+    monkeypatch.setattr(
+        "kb.core.context.create_embedding_provider",
+        fake_create_embedding_provider,
+    )
+    monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
+    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        general=GeneralConfig(
+            notes_dir="knowledge",
+            attachments_dir="media",
+            index_dir="state/index",
+        ),
+        llm=None,
+    )
+    custom_client = TestClient(create_app(config))
+
+    created = custom_client.post("/api/v1/notes", json={
+        "title": "Custom Paths",
+        "content": "Body",
+        "category": "tech",
+    }).json()["data"]
+    upload = custom_client.post(
+        "/api/v1/attachments",
+        files={"file": ("sample.txt", BytesIO(b"hello"), "text/plain")},
+    ).json()["data"]
+    rebuild = custom_client.post("/api/v1/index/rebuild")
+
+    assert created["file_id"].startswith("knowledge/tech/")
+    assert (tmp_path / created["file_id"]).is_file()
+    assert upload["path"].startswith("media/")
+    assert (tmp_path / upload["path"]).is_file()
+    assert rebuild.status_code == 200
+    assert len(rebuild_calls) == 1
+    assert rebuild_calls[0]["embedding_provider"] is not None
+    assert {
+        key: value
+        for key, value in rebuild_calls[0].items()
+        if key != "embedding_provider"
+    } == {
+        "full": True,
+        "notes_dir": "knowledge",
+        "attachments_dir": "media",
+        "index_dir": "state/index",
+    }
+    assert note_index_calls[0]["file_id"] == created["file_id"]
+    assert note_index_calls[0]["vector_store"] is not None
+    assert note_index_calls[0]["index_dir"] == "state/index"
 
 
 def test_v1_chat_without_providers_returns_error_envelope(

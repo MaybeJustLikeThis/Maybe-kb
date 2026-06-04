@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from kb.core import queries
-from kb.core.config import KBConfig, ServerConfig
+from kb.core.config import GeneralConfig, KBConfig, ServerConfig
 from kb.core.context import AppContext
 from kb.core.models import Note
 
@@ -81,3 +81,34 @@ def test_get_dashboard_stats_unifies_sources(ctx):
     assert stats["index_health"]["notes_count"] == 1
     assert stats["source_projects"][0]["name"] == "kb"
     assert stats["content_types"][0]["name"] == "markdown"
+
+
+def test_get_attachments_count_uses_configured_attachments_dir(tmp_path: Path):
+    """Attachment counts come from the configured vault subpath."""
+    custom_dir = tmp_path / "media" / "files"
+    custom_dir.mkdir(parents=True)
+    (custom_dir / "sample.txt").write_text("x", encoding="utf-8")
+    (custom_dir / "second.txt").write_text("x", encoding="utf-8")
+    default_dir = tmp_path / "attachments"
+    default_dir.mkdir()
+    (default_dir / "ignored.txt").write_text("x", encoding="utf-8")
+
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        general=GeneralConfig(
+            attachments_dir="media/files",
+            index_dir="state/index",
+        ),
+        embedding=None,
+        llm=None,
+        server=ServerConfig(host="127.0.0.1", port=8420),
+    )
+    custom_ctx = AppContext.from_config(
+        config,
+        with_embedding=False,
+        with_llm=False,
+    )
+    try:
+        assert queries.get_attachments_count(custom_ctx) == 2
+    finally:
+        custom_ctx.close()

@@ -48,6 +48,21 @@ def test_ingest_creates_note(tmp_path: Path, db: Database):
     assert row["source_project"] == "manual"
 
 
+def test_ingest_uses_custom_notes_dir(tmp_path: Path, db: Database):
+    """ingest forwards the configured notes root to note creation."""
+    req = IngestRequest(
+        title="Custom Ingest",
+        content="content",
+        source_project="manual",
+        category="tech",
+    )
+
+    note = ingest(req, tmp_path, db, notes_dir="knowledge")
+
+    assert note.file_id.startswith("knowledge/tech/")
+    assert (tmp_path / note.file_id).is_file()
+
+
 def test_ingest_applies_default_category(tmp_path: Path, db: Database):
     """When category is None, default_category from source_config is used."""
     req = IngestRequest(

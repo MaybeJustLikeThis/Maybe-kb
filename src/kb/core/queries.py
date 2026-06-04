@@ -81,7 +81,7 @@ def get_index_health(ctx: AppContext) -> dict:
 
 def get_attachments_count(ctx: AppContext) -> int:
     """Count files under the vault attachments directory."""
-    attachments_dir = ctx.vault / "attachments"
+    attachments_dir = ctx.vault / ctx.attachments_dir
     if not attachments_dir.is_dir():
         return 0
     return sum(1 for item in attachments_dir.rglob("*") if item.is_file())

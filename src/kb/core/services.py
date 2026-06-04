@@ -65,6 +65,7 @@ def create_note(
     content_type: str = "markdown",
     attachments: list[str] | None = None,
     extra_frontmatter: dict[str, Any] | None = None,
+    notes_dir: str = "notes",
 ) -> Note:
     """Create a new note — slug generation, collision avoidance, file write, DB insert.
 
@@ -76,14 +77,26 @@ def create_note(
     cat = category if category else None
 
     slug, cat = make_slug(title, cat)
-    file_path = f"notes/{cat}/{slug}.md"
-    full_path = validate_vault_path(vault_path, file_path)
+    vault_root = vault_path.resolve()
+    notes_root = (vault_path / notes_dir).resolve()
+    if not notes_root.is_relative_to(vault_root):
+        raise ValueError(f"Configured notes directory escapes the vault: {notes_dir}")
+
+    def resolve_create_path(suffix: str = "") -> tuple[str, Path]:
+        full_path = (notes_root / cat / f"{slug}{suffix}.md").resolve()
+        if (
+            not full_path.is_relative_to(vault_root)
+            or not full_path.is_relative_to(notes_root)
+        ):
+            raise ValueError("Note path escapes the configured notes directory")
+        return full_path.relative_to(vault_root).as_posix(), full_path
+
+    file_path, full_path = resolve_create_path()
 
     counter = 2
     while full_path.exists():
         suffix = f"-{counter}"
-        file_path = f"notes/{cat}/{slug}{suffix}.md"
-        full_path = validate_vault_path(vault_path, file_path)
+        file_path, full_path = resolve_create_path(suffix)
         counter += 1
 
     note = Note(

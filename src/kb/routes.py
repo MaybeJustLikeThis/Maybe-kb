@@ -102,6 +102,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
                     content_type=body.content_type,
                 ),
                 vault_path, ctx.db,
+                notes_dir=ctx.notes_dir,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -224,7 +225,11 @@ def create_api_router(ctx: AppContext) -> APIRouter:
             tmp.write(content)
             tmp_path = Path(tmp.name)
 
-        rel_path = store_attachment(tmp_path, vault_path)
+        rel_path = store_attachment(
+            tmp_path,
+            vault_path,
+            attachments_dir=ctx.attachments_dir,
+        )
         tmp_path.unlink()
         return {"path": rel_path}
 
@@ -234,7 +239,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
 
     @router.get("/attachments/stats")
     def get_attachments_stats():
-        att_dir = vault_path / "attachments"
+        att_dir = vault_path / ctx.attachments_dir
         if not att_dir.is_dir():
             return {"count": 0}
         count = sum(1 for f in att_dir.rglob("*") if f.is_file())
@@ -243,7 +248,15 @@ def create_api_router(ctx: AppContext) -> APIRouter:
     @router.post("/index")
     def trigger_index():
         from kb.core.indexer import index_files
-        count, vec_count = index_files(vault_path, ctx.db, full=True, embedding_provider=ctx.embedding)
+        count, vec_count = index_files(
+            vault_path,
+            ctx.db,
+            full=True,
+            embedding_provider=ctx.embedding,
+            notes_dir=ctx.notes_dir,
+            attachments_dir=ctx.attachments_dir,
+            index_dir=ctx.index_dir,
+        )
         return {"indexed": count, "vectors": vec_count}
 
     @router.get("/source-projects")

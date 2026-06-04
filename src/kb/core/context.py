@@ -75,6 +75,18 @@ class AppContext:
             vector_store=vector_store,
         )
 
+    @property
+    def notes_dir(self) -> str:
+        return self.config.general.notes_dir if self.config else "notes"
+
+    @property
+    def attachments_dir(self) -> str:
+        return self.config.general.attachments_dir if self.config else "attachments"
+
+    @property
+    def index_dir(self) -> str:
+        return self.config.general.index_dir if self.config else ".kb"
+
     def ensure_embedding(self) -> EmbeddingProvider | None:
         """Initialize embedding provider on demand."""
         if self.embedding is not None:
