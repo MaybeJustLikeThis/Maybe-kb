@@ -64,6 +64,12 @@ export interface NoteDetail extends NoteSummary {
   attachments: string[]
 }
 
+export interface OpenTarget {
+  obsidian_uri: string
+  file_path: string
+  relative_path: string
+}
+
 export type SearchMode = 'fulltext' | 'semantic' | 'hybrid'
 
 export interface RAGSource {
@@ -156,6 +162,10 @@ export const api = {
 
   getNote(fileId: string) {
     return request<NoteDetail>(`/notes/${encodeURIComponent(fileId)}`)
+  },
+
+  getOpenTarget(fileId: string) {
+    return request<OpenTarget>(`/notes/${encodeURIComponent(fileId)}/open-target`)
   },
 
   createNote(data: {

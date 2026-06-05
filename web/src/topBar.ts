@@ -4,6 +4,7 @@ export interface TopBarAction {
   label: string
   onClick: () => void
   btnClass: string
+  disabled?: boolean
 }
 
 export interface TopBarState {

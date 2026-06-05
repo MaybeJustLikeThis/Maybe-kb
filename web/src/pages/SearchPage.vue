@@ -52,11 +52,11 @@
 
       <ul class="results-list">
         <li v-for="result in results" :key="result.note.file_id" class="result-item">
-          <router-link
-            :to="result.note.source_project ? `/source/${encodeURIComponent(result.note.source_project)}/${encodeURIComponent(result.note.file_id)}` : `/note/${encodeURIComponent(result.note.file_id)}`"
-            class="result-card"
-          >
-            <div class="result-main">
+          <div class="result-card">
+            <router-link
+              :to="result.note.source_project ? `/source/${encodeURIComponent(result.note.source_project)}/${encodeURIComponent(result.note.file_id)}` : `/note/${encodeURIComponent(result.note.file_id)}`"
+              class="result-main result-link"
+            >
               <div class="result-title-row">
                 <h3>{{ result.note.title }}</h3>
                 <span v-if="result.score !== null" class="score-badge">
@@ -76,13 +76,21 @@
                 <span v-if="result.note.category" class="badge badge-primary">{{ result.note.category }}</span>
                 <span v-for="tag in result.note.tags" :key="tag" class="badge badge-muted">{{ tag }}</span>
               </div>
-            </div>
+            </router-link>
 
             <div class="result-source">
               <span>Source</span>
               <strong>{{ result.source }}</strong>
+              <button
+                type="button"
+                class="btn btn-secondary result-open-button"
+                :aria-label="`Open ${result.note.title} in Obsidian`"
+                @click="openResultInObsidian(result.note.file_id)"
+              >
+                Open in Obsidian
+              </button>
             </div>
-          </router-link>
+          </div>
         </li>
       </ul>
     </section>
@@ -121,6 +129,15 @@ async function search() {
     results.value = await api.search(q, lastMode.value)
   } finally {
     searching.value = false
+  }
+}
+
+async function openResultInObsidian(fileId: string) {
+  try {
+    const target = await api.getOpenTarget(fileId)
+    window.location.href = target.obsidian_uri
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Unable to open in Obsidian')
   }
 }
 </script>
@@ -274,6 +291,10 @@ async function search() {
   min-width: 0;
 }
 
+.result-link {
+  display: block;
+}
+
 .result-title-row {
   display: flex;
   align-items: flex-start;
@@ -355,6 +376,14 @@ async function search() {
   font-weight: 750;
 }
 
+.result-open-button {
+  align-self: flex-end;
+  min-width: 128px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+}
+
 @media (max-width: 720px) {
   .command-card {
     grid-template-columns: auto minmax(0, 1fr);
@@ -381,6 +410,10 @@ async function search() {
   .result-source {
     align-items: flex-start;
     text-align: left;
+  }
+
+  .result-open-button {
+    align-self: flex-start;
   }
 }
 </style>

@@ -21,6 +21,7 @@
           <span v-if="(category || tags.length > 0) && noteUpdatedAt" style="color: var(--color-border);">/</span>
           <span v-if="noteUpdatedAt">{{ noteUpdatedAt }}</span>
         </div>
+        <p v-if="openError" class="open-error">{{ openError }}</p>
 
         <section
           v-if="contentType || sourceProject || sourcePath || sourceContext || attachments.length"
@@ -116,7 +117,7 @@ import { markedHighlight } from 'marked-highlight'
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.min.css'
-import { api } from '../api'
+import { api, ApiError, type OpenTarget } from '../api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import { setTopBar } from '../topBar'
 
@@ -145,6 +146,8 @@ const contentType = ref('markdown')
 const attachments = ref<string[]>([])
 const relatedNotes = ref<Array<{ file_id: string; title: string; category: string | null; tags: string[]; source_project: string | null; score: number }>>([])
 const relatedError = ref(false)
+const openTarget = ref<OpenTarget | null>(null)
+const openError = ref<string | null>(null)
 let loadRequestId = 0
 
 function resetNoteState() {
@@ -161,6 +164,8 @@ function resetNoteState() {
   attachments.value = []
   relatedNotes.value = []
   relatedError.value = false
+  openTarget.value = null
+  openError.value = null
 }
 
 function vaultHref(path: string) {
@@ -222,14 +227,20 @@ function syncTopBar() {
       backTo,
       title: title.value,
       actions: [
-        { label: 'Edit', onClick: startEdit, btnClass: 'btn btn-outline' },
+        {
+          label: 'Open in Obsidian',
+          onClick: openInObsidian,
+          btnClass: 'btn btn-primary',
+          disabled: !openTarget.value,
+        },
+        { label: 'Edit in Web', onClick: startEdit, btnClass: 'btn btn-outline' },
         { label: 'Delete', onClick: deleteNote, btnClass: 'btn btn-danger' },
       ],
     })
   }
 }
 
-watch([isEditing, title], syncTopBar, { immediate: true })
+watch([isEditing, title, openTarget], syncTopBar, { immediate: true })
 
 async function loadNote() {
   const requestId = ++loadRequestId
@@ -258,6 +269,20 @@ async function loadNote() {
       sourceContext.value = note.source_context
       contentType.value = note.content_type || 'markdown'
       attachments.value = note.attachments ?? []
+      try {
+        const target = await api.getOpenTarget(fileId)
+        if (requestId !== loadRequestId || props.fileId !== fileId) return
+
+        openTarget.value = target
+        openError.value = null
+      } catch (e) {
+        if (requestId !== loadRequestId || props.fileId !== fileId) return
+
+        openTarget.value = null
+        openError.value = e instanceof ApiError
+          ? e.message
+          : 'Unable to open in Obsidian'
+      }
       try {
         const related = await api.getRelatedNotes(fileId, 5)
         if (requestId !== loadRequestId || props.fileId !== fileId) return
@@ -300,6 +325,11 @@ onUnmounted(() => {
 
 function startEdit() {
   isEditing.value = true
+}
+
+function openInObsidian() {
+  if (!openTarget.value) return
+  window.location.href = openTarget.value.obsidian_uri
 }
 
 function cancelEdit() {
@@ -393,6 +423,12 @@ async function deleteNote() {
   color: var(--color-primary-hover);
   font-size: 0.84rem;
   overflow-wrap: anywhere;
+}
+
+.open-error {
+  margin: -18px 0 20px;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
 }
 
 @media (max-width: 720px) {

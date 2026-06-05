@@ -51,6 +51,7 @@
           :key="action.label"
           @click="action.onClick"
           :class="action.btnClass"
+          :disabled="action.disabled"
         >{{ action.label }}</button>
       </div>
     </header>

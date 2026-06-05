@@ -29,24 +29,36 @@
           >
             <div class="message-content">{{ msg.content }}</div>
             <div v-if="msg.sources?.length" class="source-list">
-              <router-link
+              <div
                 v-for="source in msg.sources"
                 :key="source.file_id"
-                :to="source.source_project ? `/source/${encodeURIComponent(source.source_project)}/${encodeURIComponent(source.file_id)}` : `/note/${encodeURIComponent(source.file_id)}`"
                 class="source-card"
               >
-                <div class="source-card-main">
-                  <strong>{{ source.title }}</strong>
-                  <p>{{ source.snippet }}</p>
-                </div>
-                <div class="source-card-meta">
-                  <span>{{ source.content_type }}</span>
-                  <span v-if="source.attachments.length">
-                    {{ source.attachments.length }} attachment{{ source.attachments.length > 1 ? 's' : '' }}
-                  </span>
-                  <span v-if="source.source_path">{{ source.source_path }}</span>
-                </div>
-              </router-link>
+                <router-link
+                  :to="source.source_project ? `/source/${encodeURIComponent(source.source_project)}/${encodeURIComponent(source.file_id)}` : `/note/${encodeURIComponent(source.file_id)}`"
+                  class="source-card-link"
+                >
+                  <div class="source-card-main">
+                    <strong>{{ source.title }}</strong>
+                    <p>{{ source.snippet }}</p>
+                  </div>
+                  <div class="source-card-meta">
+                    <span>{{ source.content_type }}</span>
+                    <span v-if="source.attachments.length">
+                      {{ source.attachments.length }} attachment{{ source.attachments.length > 1 ? 's' : '' }}
+                    </span>
+                    <span v-if="source.source_path">{{ source.source_path }}</span>
+                  </div>
+                </router-link>
+                <button
+                  type="button"
+                  class="btn btn-secondary source-open-button"
+                  :aria-label="`Open ${source.title} in Obsidian`"
+                  @click="openSourceInObsidian(source.file_id)"
+                >
+                  Open in Obsidian
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -122,6 +134,16 @@ async function ask() {
     messages.value.push({ id: ++nextId, role: 'assistant', content: message })
   } finally {
     loading.value = false
+  }
+}
+
+async function openSourceInObsidian(fileId: string) {
+  try {
+    const target = await api.getOpenTarget(fileId)
+    window.location.href = target.obsidian_uri
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unable to open in Obsidian'
+    messages.value.push({ id: ++nextId, role: 'assistant', content: message })
   }
 }
 
@@ -283,6 +305,11 @@ watch(() => messages.value.length, async () => {
   border-color: var(--color-primary);
 }
 
+.source-card-link {
+  display: grid;
+  gap: 6px;
+}
+
 .source-card-main strong {
   display: block;
   color: var(--color-primary-hover);
@@ -309,6 +336,14 @@ watch(() => messages.value.length, async () => {
 
 .source-card-meta span {
   overflow-wrap: anywhere;
+}
+
+.source-open-button {
+  justify-self: start;
+  min-width: 128px;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
 }
 
 .command-bar {
