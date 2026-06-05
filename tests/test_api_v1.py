@@ -284,6 +284,22 @@ def test_v1_dashboard_returns_summary(client: TestClient) -> None:
     assert data["index_health"]["notes_count"] == 1
 
 
+def test_v1_health_returns_system_readiness(client: TestClient) -> None:
+    """GET /api/v1/health returns setup readiness in a standard envelope."""
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    assert body["data"]["status"] in {"ready", "warning", "error"}
+    assert isinstance(body["data"]["checks"], list)
+    assert {
+        "notes_count",
+        "vectors_count",
+        "coverage",
+    }.issubset(body["data"]["summary"])
+
+
 def test_v1_dashboard_activity_returns_empty_envelope(client: TestClient) -> None:
     """Dashboard activity returns an empty list for an empty knowledge base."""
     response = client.get("/api/v1/dashboard/activity")

@@ -121,6 +121,26 @@ class IndexHealth(BaseModel):
     coverage: float
 
 
+class HealthCheck(BaseModel):
+    id: str
+    label: str
+    status: Literal["ready", "warning", "error"]
+    message: str
+    action: str | None = None
+
+
+class HealthSummary(BaseModel):
+    notes_count: int
+    vectors_count: int
+    coverage: float
+
+
+class SystemHealth(BaseModel):
+    status: Literal["ready", "warning", "error"]
+    checks: list[HealthCheck] = Field(default_factory=list)
+    summary: HealthSummary
+
+
 class DashboardStats(BaseModel):
     notes_count: int
     attachments_count: int

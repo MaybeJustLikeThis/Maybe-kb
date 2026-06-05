@@ -37,6 +37,12 @@
           :vectors-count="indexHealth.vectors_count"
           :coverage="indexHealth.coverage"
         />
+        <SystemHealth
+          v-if="health"
+          :health="health"
+          :rebuilding="reindexing"
+          @rebuild="handleReindex"
+        />
         <DashboardActivity :items="activity" :error="activityError" />
       </div>
 
@@ -54,9 +60,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { api, type DashboardActivityItem, type Note } from '../api'
+import { api, type DashboardActivityItem, type Note, type SystemHealth as SystemHealthData } from '../api'
 import StatCard from '../components/StatCard.vue'
 import IndexHealth from '../components/IndexHealth.vue'
+import SystemHealth from '../components/SystemHealth.vue'
 import SourceProjects from '../components/SourceProjects.vue'
 import ContentFormatPie from '../components/ContentFormatPie.vue'
 import QuickActions from '../components/QuickActions.vue'
@@ -69,15 +76,17 @@ const stats = ref({ notesCount: 0, typesCount: 0, categoriesCount: 0, tagsCount:
 const sourceProjects = ref<Array<{ name: string; count: number; label?: string | null }>>([])
 const contentTypes = ref<Array<{ name: string; count: number }>>([])
 const indexHealth = ref({ notes_count: 0, vectors_count: 0, coverage: 0 })
+const health = ref<SystemHealthData | null>(null)
 const recentNotes = ref<Note[]>([])
 const activity = ref<DashboardActivityItem[]>([])
 const activityError = ref(false)
+const reindexing = ref(false)
 
 onMounted(async () => {
   try {
     const [
       indexData, attData, catData, tagData, notesData,
-      srcData, ctData, healthData,
+      srcData, ctData, indexHealthData, systemHealthData,
     ] = await Promise.all([
       api.getIndexStatus(),
       api.getAttachmentsStats(),
@@ -87,6 +96,7 @@ onMounted(async () => {
       api.getSourceProjects(),
       api.getContentTypeStats(),
       api.getIndexHealth(),
+      api.getHealth(),
     ])
     stats.value = {
       notesCount: indexData.notes_count,
@@ -97,7 +107,8 @@ onMounted(async () => {
     }
     sourceProjects.value = srcData.projects
     contentTypes.value = ctData.content_types
-    indexHealth.value = healthData
+    indexHealth.value = indexHealthData
+    health.value = systemHealthData
     recentNotes.value = notesData
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load dashboard'
@@ -113,10 +124,19 @@ onMounted(async () => {
 })
 
 async function handleReindex() {
+  reindexing.value = true
   try {
     await api.triggerIndex()
+    const [indexHealthData, systemHealthData] = await Promise.all([
+      api.getIndexHealth(),
+      api.getHealth(),
+    ])
+    indexHealth.value = indexHealthData
+    health.value = systemHealthData
   } catch (e) {
     // silent
+  } finally {
+    reindexing.value = false
   }
 }
 </script>

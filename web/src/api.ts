@@ -119,6 +119,26 @@ export interface DashboardStats {
   }
 }
 
+export type HealthStatus = 'ready' | 'warning' | 'error'
+
+export interface HealthCheck {
+  id: string
+  label: string
+  status: HealthStatus
+  message: string
+  action: string | null
+}
+
+export interface SystemHealth {
+  status: HealthStatus
+  checks: HealthCheck[]
+  summary: {
+    notes_count: number
+    vectors_count: number
+    coverage: number
+  }
+}
+
 export interface SourceItem {
   name: string
   label: string
@@ -270,6 +290,10 @@ export const api = {
 
   getIndexHealth() {
     return request<DashboardStats>('/dashboard').then((stats) => stats.index_health)
+  },
+
+  getHealth() {
+    return request<SystemHealth>('/health')
   },
 
   getDashboardActivity(params?: { limit?: number }) {

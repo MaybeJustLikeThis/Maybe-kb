@@ -8,9 +8,17 @@ from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from kb.api import responses
-from kb.api.schemas import ApiResponse, ChatRequest, NoteCreateRequest, NoteUpdateRequest, OpenTarget
+from kb.api.schemas import (
+    ApiResponse,
+    ChatRequest,
+    NoteCreateRequest,
+    NoteUpdateRequest,
+    OpenTarget,
+    SystemHealth,
+)
 from kb.core import queries, services
 from kb.core.context import AppContext
+from kb.core.health import get_system_health
 from kb.core.indexer import index_files, index_note_vectors
 from kb.core.open_targets import build_obsidian_open_target
 from kb.core.rag import rag_query, rag_query_stream, rag_source_to_dict
@@ -169,6 +177,10 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     @router.get("/dashboard")
     def get_dashboard():
         return responses.ok(queries.get_dashboard_stats(ctx))
+
+    @router.get("/health", response_model=ApiResponse[SystemHealth])
+    def get_health():
+        return responses.ok(get_system_health(ctx))
 
     @router.get("/sources")
     def get_sources():
