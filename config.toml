@@ -1,5 +1,8 @@
 [general]
-vault_path = "."
+vault_path = "D:/ObsidianVault"
+notes_dir = "notes"
+attachments_dir = "attachments"
+index_dir = ".kb"
 
 [search]
 max_results = 20
@@ -36,3 +39,9 @@ description = "手动创建的知识笔记"
 icon = "MN"
 default_category = "未分类"
 auto_tags = []
+
+[obsidian]
+enabled = true
+vault_name = "ObsidianVault"
+vault_path = "D:/ObsidianVault"
+open_uri_strategy = "file"
