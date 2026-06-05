@@ -51,6 +51,12 @@ class NoteDetail(NoteBase):
     attachments: list[str] = Field(default_factory=list)
 
 
+class OpenTarget(BaseModel):
+    obsidian_uri: str
+    file_path: str
+    relative_path: str
+
+
 class RAGSource(BaseModel):
     file_id: str
     title: str

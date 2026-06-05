@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from kb.core.config import GeneralConfig, KBConfig, ServerConfig
+from kb.core.config import GeneralConfig, KBConfig, ObsidianConfig, ServerConfig
 from kb.server import create_app
 
 
@@ -20,6 +20,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     kb_config = KBConfig(
         vault_path=vault.resolve(),
         server=ServerConfig(host="127.0.0.1", port=8420),
+        obsidian=ObsidianConfig(enabled=True, vault_name="ObsidianVault"),
     )
     app = create_app(kb_config)
     return TestClient(app)
@@ -118,6 +119,75 @@ def test_v1_create_get_update_delete_note(client: TestClient) -> None:
     missing_resp = client.get(f"/api/v1/notes/{file_id}")
     assert missing_resp.status_code == 404
     assert_error_envelope(missing_resp.json(), "NOTE_NOT_FOUND")
+
+
+def test_v1_note_open_target(client: TestClient) -> None:
+    """GET /api/v1/notes/{file_id}/open-target returns Obsidian URI data."""
+    create = client.post("/api/v1/notes", json={
+        "title": "测试 note",
+        "content": "# 测试 note\n",
+        "source_project": "manual",
+    })
+    assert create.status_code == 200
+    file_id = create.json()["data"]["file_id"]
+
+    response = client.get(f"/api/v1/notes/{file_id}/open-target")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["relative_path"] == file_id
+    assert data["file_path"].endswith(file_id)
+    assert data["obsidian_uri"] == (
+        "obsidian://open?vault=ObsidianVault&file="
+        "notes%2F%E6%9C%AA%E5%88%86%E7%B1%BB%2F"
+        "%E6%B5%8B%E8%AF%95-note.md"
+    )
+
+
+def test_v1_note_open_target_is_in_openapi_schema(client: TestClient) -> None:
+    """Open target response model is visible in generated OpenAPI."""
+    schema = client.get("/openapi.json").json()
+    operation = schema["paths"]["/api/v1/notes/{file_id}/open-target"]["get"]
+
+    assert "OpenTarget" in schema["components"]["schemas"]
+    assert (
+        operation["responses"]["200"]["content"]["application/json"]["schema"]
+        ["$ref"]
+        == "#/components/schemas/ApiResponse_OpenTarget_"
+    )
+
+
+def test_v1_note_open_target_missing_and_traversal_errors(client: TestClient) -> None:
+    """Open target endpoint preserves note/path error envelopes."""
+    missing = client.get("/api/v1/notes/notes/missing.md/open-target")
+    traversal = client.get("/api/v1/notes/%2e%2e%2fsecret.md/open-target")
+
+    assert missing.status_code == 404
+    assert_error_envelope(missing.json(), "NOTE_NOT_FOUND")
+    assert traversal.status_code == 403
+    assert_error_envelope(traversal.json(), "PATH_TRAVERSAL_BLOCKED")
+
+
+def test_v1_note_open_target_requires_obsidian_enabled(tmp_path: Path) -> None:
+    """Open target endpoint reports disabled Obsidian integration."""
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "attachments").mkdir()
+    (tmp_path / ".kb").mkdir()
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        obsidian=ObsidianConfig(enabled=False),
+        llm=None,
+    )
+    custom_client = TestClient(create_app(config))
+    created = custom_client.post("/api/v1/notes", json={
+        "title": "Disabled",
+        "content": "Body",
+    }).json()["data"]
+
+    response = custom_client.get(f"/api/v1/notes/{created['file_id']}/open-target")
+
+    assert response.status_code == 400
+    assert_error_envelope(response.json(), "PROVIDER_NOT_CONFIGURED")
 
 
 def test_v1_create_note_preserves_import_metadata(client: TestClient) -> None:

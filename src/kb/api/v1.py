@@ -8,10 +8,11 @@ from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from kb.api import responses
-from kb.api.schemas import ChatRequest, NoteCreateRequest, NoteUpdateRequest
+from kb.api.schemas import ApiResponse, ChatRequest, NoteCreateRequest, NoteUpdateRequest, OpenTarget
 from kb.core import queries, services
 from kb.core.context import AppContext
 from kb.core.indexer import index_files, index_note_vectors
+from kb.core.open_targets import build_obsidian_open_target
 from kb.core.rag import rag_query, rag_query_stream, rag_source_to_dict
 from kb.core.serializers import note_to_detail
 from kb.data.attachments import store_attachment
@@ -94,6 +95,20 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     def get_related_notes(file_id: str, limit: int = Query(5, ge=1, le=20)):
         try:
             return responses.ok(queries.get_related_notes(ctx, file_id, limit))
+        except (FileNotFoundError, ValueError) as exc:
+            return _not_found_or_path_error(exc)
+
+    @router.get(
+        "/notes/{file_id:path}/open-target",
+        response_model=ApiResponse[OpenTarget],
+    )
+    def get_note_open_target(file_id: str):
+        if ctx.config is None or not ctx.config.obsidian.enabled:
+            return responses.provider_not_configured(
+                "Obsidian integration is disabled",
+            )
+        try:
+            return responses.ok(build_obsidian_open_target(ctx.config, file_id))
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
 
