@@ -110,7 +110,8 @@ def create_api_router(ctx: AppContext) -> APIRouter:
 
     @router.get("/notes/{file_id:path}/related")
     def get_related_notes(file_id: str, limit: int = Query(5, ge=1, le=20)):
-        if ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        if embedding is None:
             return []
         try:
             _, note = services.resolve_note(vault_path, file_id)
@@ -119,7 +120,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Note not found")
 
-        embed_result = ctx.embedding.embed(note.content)
+        embed_result = embedding.embed(note.content)
         records = ctx.vector_store.search(embed_result.vector, limit=limit * 3 + 1)
 
         results = []
@@ -174,8 +175,11 @@ def create_api_router(ctx: AppContext) -> APIRouter:
         limit: int = Query(20),
         mode: str = Query("fts5"),
     ):
-        if mode == "hybrid" and ctx.embedding is not None:
-            results = hybrid_search(q, ctx.db, ctx.embedding, ctx.vector_store, limit)
+        if mode == "hybrid":
+            embedding = ctx.ensure_embedding()
+            if embedding is None:
+                return []
+            results = hybrid_search(q, ctx.db, embedding, ctx.vector_store, limit)
             return [
                 {"file_id": r.file_id, "title": r.title,
                  "score": r.score, "source": r.source}
@@ -186,9 +190,10 @@ def create_api_router(ctx: AppContext) -> APIRouter:
 
     @router.get("/semantic-search")
     def semantic_search(q: str = Query(..., min_length=1), limit: int = Query(20)):
-        if ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        if embedding is None:
             return []
-        embed_result = ctx.embedding.embed(q)
+        embed_result = embedding.embed(q)
         records = ctx.vector_store.search(embed_result.vector, limit=limit)
 
         results = []
@@ -252,7 +257,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
             vault_path,
             ctx.db,
             full=True,
-            embedding_provider=ctx.embedding,
+            embedding_provider=ctx.ensure_embedding(),
             notes_dir=ctx.notes_dir,
             attachments_dir=ctx.attachments_dir,
             index_dir=ctx.index_dir,
@@ -297,19 +302,23 @@ def create_api_router(ctx: AppContext) -> APIRouter:
 
     @router.post("/chat/ask")
     def chat_ask(body: ChatRequest):
-        if ctx.llm is None or ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        llm = ctx.ensure_llm()
+        if llm is None or embedding is None:
             raise HTTPException(status_code=400, detail="LLM and embedding config required")
 
-        response = rag_query(body.query, ctx.db, ctx.embedding, ctx.vector_store, ctx.llm, top_k=body.top_k)
+        response = rag_query(body.query, ctx.db, embedding, ctx.vector_store, llm, top_k=body.top_k)
         return {"answer": response.text, "model": response.model, "tokens_used": response.tokens_used}
 
     @router.post("/chat")
     async def chat_stream(body: ChatRequest):
-        if ctx.llm is None or ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        llm = ctx.ensure_llm()
+        if llm is None or embedding is None:
             raise HTTPException(status_code=400, detail="LLM and embedding config required")
 
         async def generate():
-            for chunk in rag_query_stream(body.query, ctx.db, ctx.embedding, ctx.vector_store, ctx.llm, top_k=body.top_k):
+            for chunk in rag_query_stream(body.query, ctx.db, embedding, ctx.vector_store, llm, top_k=body.top_k):
                 yield f"data: {json.dumps({'text': chunk.text})}\n\n"
             yield f"data: {json.dumps({'done': True})}\n\n"
 

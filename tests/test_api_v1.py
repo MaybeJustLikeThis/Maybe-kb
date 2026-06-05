@@ -338,11 +338,17 @@ def test_v1_index_rebuild_returns_envelope(client: TestClient) -> None:
 
 
 def test_v1_create_note_updates_vector_index(
-    client: TestClient,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Creating a note attempts single-note vector indexing when embedding exists."""
     calls: list[str] = []
+
+    def fake_create_embedding_provider(config):
+        return object()
+
+    def fake_index_files(vault, db, **kwargs):
+        return 0, 0
 
     def fake_index_note_vectors(
         vault,
@@ -356,7 +362,15 @@ def test_v1_create_note_updates_vector_index(
         calls.append(file_id)
         return 1
 
+    monkeypatch.setattr(
+        "kb.core.context.create_embedding_provider",
+        fake_create_embedding_provider,
+    )
+    monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
     monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+
+    client = TestClient(create_app(KBConfig(vault_path=tmp_path.resolve(), llm=None)))
+    client.post("/api/v1/index/rebuild")
 
     response = client.post("/api/v1/notes", json={
         "title": "Vector Indexed",
@@ -370,11 +384,17 @@ def test_v1_create_note_updates_vector_index(
 
 
 def test_v1_update_note_updates_vector_index(
-    client: TestClient,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Updating a note attempts single-note vector indexing when embedding exists."""
     calls: list[str] = []
+
+    def fake_create_embedding_provider(config):
+        return object()
+
+    def fake_index_files(vault, db, **kwargs):
+        return 0, 0
 
     def fake_index_note_vectors(
         vault,
@@ -388,7 +408,15 @@ def test_v1_update_note_updates_vector_index(
         calls.append(file_id)
         return 1
 
+    monkeypatch.setattr(
+        "kb.core.context.create_embedding_provider",
+        fake_create_embedding_provider,
+    )
+    monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
     monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+
+    client = TestClient(create_app(KBConfig(vault_path=tmp_path.resolve(), llm=None)))
+    client.post("/api/v1/index/rebuild")
 
     created = client.post("/api/v1/notes", json={
         "title": "Update Vector Indexed",
@@ -468,6 +496,8 @@ def test_v1_uses_configured_vault_subpaths(
         llm=None,
     )
     custom_client = TestClient(create_app(config))
+    custom_client.post("/api/v1/index/rebuild")
+    rebuild_calls.clear()
 
     created = custom_client.post("/api/v1/notes", json={
         "title": "Custom Paths",

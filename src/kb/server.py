@@ -27,7 +27,13 @@ def _resolve_static_path(static_dir: Path, full_path: str) -> Path:
 
 def create_app(kb_config: KBConfig) -> FastAPI:
     """Create the FastAPI application with all endpoints."""
-    ctx = AppContext.from_config(kb_config)
+    ctx = AppContext.from_config(
+        kb_config,
+        with_embedding=False,
+        with_llm=False,
+        allow_lazy_embedding=True,
+        allow_lazy_llm=True,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

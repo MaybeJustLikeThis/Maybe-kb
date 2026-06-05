@@ -25,6 +25,8 @@ class AppContext:
     embedding: EmbeddingProvider | None = None
     llm: LLMProvider | None = None
     vector_store: VectorStore | None = None
+    allow_lazy_embedding: bool = True
+    allow_lazy_llm: bool = True
     suggestion_engine: object | None = field(default=None, init=False)
     _closed: bool = field(default=False, init=False)
 
@@ -36,6 +38,8 @@ class AppContext:
         vault: Path | None = None,
         with_embedding: bool = True,
         with_llm: bool = True,
+        allow_lazy_embedding: bool | None = None,
+        allow_lazy_llm: bool | None = None,
     ) -> AppContext:
         """Initialize resources from KBConfig.
 
@@ -44,6 +48,8 @@ class AppContext:
             vault: Override vault path (defaults to config.vault_path).
             with_embedding: If False, skip embedding provider init.
             with_llm: If False, skip LLM provider init.
+            allow_lazy_embedding: If True, ensure_embedding may initialize later.
+            allow_lazy_llm: If True, ensure_llm may initialize later.
         """
         if vault is None:
             vault = config.vault_path
@@ -73,6 +79,12 @@ class AppContext:
             embedding=embedding,
             llm=llm,
             vector_store=vector_store,
+            allow_lazy_embedding=(
+                with_embedding
+                if allow_lazy_embedding is None
+                else allow_lazy_embedding
+            ),
+            allow_lazy_llm=with_llm if allow_lazy_llm is None else allow_lazy_llm,
         )
 
     @property
@@ -91,7 +103,11 @@ class AppContext:
         """Initialize embedding provider on demand."""
         if self.embedding is not None:
             return self.embedding
-        if self.config is None or self.config.embedding is None:
+        if (
+            not self.allow_lazy_embedding
+            or self.config is None
+            or self.config.embedding is None
+        ):
             return None
         self.embedding = create_embedding_provider(self.config.embedding)
         return self.embedding
@@ -100,7 +116,7 @@ class AppContext:
         """Initialize LLM provider on demand."""
         if self.llm is not None:
             return self.llm
-        if self.config is None or self.config.llm is None:
+        if not self.allow_lazy_llm or self.config is None or self.config.llm is None:
             return None
         self.llm = create_llm_provider(self.config.llm)
         return self.llm

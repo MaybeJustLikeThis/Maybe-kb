@@ -382,13 +382,13 @@ def migrate(
 
             if dry_run:
                 console.print(
-                    f"[dim]Would move: {src.name} → {target.relative_to(vault).as_posix()}[/dim]"
+                    f"[dim]Would move: {src.name} -> {target.relative_to(vault).as_posix()}[/dim]"
                 )
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 src.rename(target)
                 console.print(
-                    f"[green]Moved: {src.name} → {target.relative_to(vault).as_posix()}[/green]"
+                    f"[green]Moved: {src.name} -> {target.relative_to(vault).as_posix()}[/green]"
                 )
             moved += 1
 

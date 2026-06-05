@@ -41,12 +41,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Marked } from 'marked'
-import { markedHighlight } from 'marked-highlight'
-import DOMPurify from 'dompurify'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.min.css'
 import { api } from '../api'
+import { renderMarkdown } from '../markdown'
 
 const props = defineProps<{
   modelValue: string
@@ -92,22 +88,8 @@ function escapeMarkdownLinkText(text: string) {
   return text.replace(/[\r\n]+/g, ' ').replace(/([\\[\]])/g, '\\$1')
 }
 
-const marked = new Marked(
-  markedHighlight({
-    langPrefix: 'hljs language-',
-    highlight(code: string, lang: string) {
-      if (lang && hljs.getLanguage(lang)) {
-        return hljs.highlight(code, { language: lang }).value
-      }
-      return hljs.highlightAuto(code).value
-    },
-  }),
-  { breaks: true, gfm: true },
-)
-
 const renderedHtml = computed(() => {
-  const raw = marked.parse(props.modelValue || '', { async: false }) as string
-  let html = DOMPurify.sanitize(raw)
+  let html = renderMarkdown(props.modelValue || '')
   if (props.noteDir) {
     html = html.replace(
       /(<img\s[^>]*\bsrc=")((?!https?:\/\/|\/|data:)[^"]+)(")/gi,

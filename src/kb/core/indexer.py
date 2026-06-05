@@ -20,6 +20,7 @@ from kb.data.storage import (
 from kb.data.vector import VectorRecord, VectorStore
 
 logger = logging.getLogger(__name__)
+UNCATEGORIZED_CATEGORY = "未分类"
 
 _FRONTMATTER_BOUNDARY_RE = re.compile(
     r"^---[ \t]*\r?\n(?P<raw>.*?)\r?\n---[ \t]*(?:\r?\n|$)",
@@ -113,12 +114,12 @@ def index_files(
             for f in sorted(src_dir.rglob("*.md")):
                 try:
                     note = parse_markdown_file(f, src_dir)
-                    cat = note.category if note.category else "未分类"
+                    cat = note.category if note.category else UNCATEGORIZED_CATEGORY
                 except Exception:
-                    cat = "未分类"
+                    cat = UNCATEGORIZED_CATEGORY
                 cat = cat.replace("/", "-").replace("\\", "-")
                 if cat in {".", ".."}:
-                    cat = "未分类"
+                    cat = UNCATEGORIZED_CATEGORY
                 category_dir = notes_root / cat
                 resolved_category_dir = category_dir.resolve()
                 if not _is_within_roots(

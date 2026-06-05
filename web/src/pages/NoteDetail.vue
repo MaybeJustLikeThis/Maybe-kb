@@ -112,13 +112,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Marked } from 'marked'
-import { markedHighlight } from 'marked-highlight'
-import DOMPurify from 'dompurify'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.min.css'
 import { api, ApiError, type OpenTarget } from '../api'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { renderMarkdown } from '../markdown'
 import { setTopBar } from '../topBar'
 
 const props = defineProps<{ name?: string; fileId?: string }>()
@@ -172,22 +168,8 @@ function vaultHref(path: string) {
   return `/vault/${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
-const marked = new Marked(
-  markedHighlight({
-    langPrefix: 'hljs language-',
-    highlight(code: string, lang: string) {
-      if (lang && hljs.getLanguage(lang)) {
-        return hljs.highlight(code, { language: lang }).value
-      }
-      return hljs.highlightAuto(code).value
-    },
-  }),
-  { breaks: true, gfm: true },
-)
-
 const renderedContent = computed(() => {
-  const raw = marked.parse(content.value || '', { async: false }) as string
-  let html = DOMPurify.sanitize(raw)
+  let html = renderMarkdown(content.value || '')
   // Resolve relative image src to /vault/ absolute paths
   if (props.fileId) {
     const noteDir = props.fileId.substring(0, props.fileId.lastIndexOf('/') + 1)

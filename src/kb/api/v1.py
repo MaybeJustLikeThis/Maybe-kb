@@ -194,7 +194,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 ctx.vault,
                 ctx.db,
                 full=True,
-                embedding_provider=ctx.embedding,
+                embedding_provider=ctx.ensure_embedding(),
                 notes_dir=ctx.notes_dir,
                 attachments_dir=ctx.attachments_dir,
                 index_dir=ctx.index_dir,
@@ -236,16 +236,18 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
 
     @router.post("/chat/ask")
     def chat_ask(body: ChatRequest):
-        if ctx.llm is None or ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        llm = ctx.ensure_llm()
+        if llm is None or embedding is None:
             return responses.provider_not_configured(
                 "LLM and embedding config required",
             )
         response = rag_query(
             body.query,
             ctx.db,
-            ctx.embedding,
+            embedding,
             ctx.vector_store,
-            ctx.llm,
+            llm,
             top_k=body.top_k,
         )
         return responses.ok({
@@ -260,7 +262,9 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
 
     @router.post("/chat/stream")
     async def chat_stream(body: ChatRequest):
-        if ctx.llm is None or ctx.embedding is None:
+        embedding = ctx.ensure_embedding()
+        llm = ctx.ensure_llm()
+        if llm is None or embedding is None:
             return responses.provider_not_configured(
                 "LLM and embedding config required",
             )
@@ -269,9 +273,9 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             for chunk in rag_query_stream(
                 body.query,
                 ctx.db,
-                ctx.embedding,
+                embedding,
                 ctx.vector_store,
-                ctx.llm,
+                llm,
                 top_k=body.top_k,
             ):
                 yield (

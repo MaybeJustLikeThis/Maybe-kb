@@ -25,6 +25,8 @@ def create_mcp_server(config: KBConfig):
         config,
         with_embedding=False,
         with_llm=False,
+        allow_lazy_embedding=True,
+        allow_lazy_llm=True,
     )
     mcp._kb_context = ctx
     vault = ctx.vault

@@ -24,6 +24,69 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return TestClient(app)
 
 
+def test_create_app_does_not_initialize_ai_providers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Creating the web app should not load embedding or LLM providers."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / "attachments").mkdir()
+    (vault / ".kb").mkdir()
+
+    def fail_embedding(config):
+        raise AssertionError("embedding provider should be lazy")
+
+    def fail_llm(config):
+        raise AssertionError("llm provider should be lazy")
+
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", fail_embedding)
+    monkeypatch.setattr("kb.core.context.create_llm_provider", fail_llm)
+
+    kb_config = KBConfig(
+        vault_path=vault.resolve(),
+        server=ServerConfig(host="127.0.0.1", port=8420),
+    )
+
+    app = create_app(kb_config)
+
+    assert app.title == "kb"
+
+
+def test_v1_create_note_does_not_initialize_ai_providers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Basic note creation should stay lightweight."""
+    vault = tmp_path
+    (vault / "notes").mkdir()
+    (vault / "attachments").mkdir()
+    (vault / ".kb").mkdir()
+
+    def fail_embedding(config):
+        raise AssertionError("embedding provider should be lazy")
+
+    def fail_llm(config):
+        raise AssertionError("llm provider should be lazy")
+
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", fail_embedding)
+    monkeypatch.setattr("kb.core.context.create_llm_provider", fail_llm)
+
+    kb_config = KBConfig(
+        vault_path=vault.resolve(),
+        server=ServerConfig(host="127.0.0.1", port=8420),
+    )
+    client = TestClient(create_app(kb_config))
+
+    response = client.post("/api/v1/notes", json={
+        "title": "Lightweight Note",
+        "content": "No model load needed",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["data"]["title"] == "Lightweight Note"
+
+
 def test_create_note(client):
     """POST /api/notes creates a note."""
     resp = client.post("/api/notes", json={
