@@ -17,6 +17,7 @@ from rich.table import Table
 from kb.core.config import load_config
 from kb.core.config_writer import render_toml_sections, write_toml_text
 from kb.core.context import AppContext
+from kb.core.import_file import ImportFileError
 from kb.core.indexer import index_files
 from kb.data.storage import parse_markdown_file, validate_vault_path
 from kb.core import services
@@ -154,6 +155,47 @@ def add_note(
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    finally:
+        ctx.close()
+
+    console.print(f"[green]Created note:[/green] {note.file_id}")
+
+
+@app.command("import")
+def import_cmd(
+    file_path: Path = typer.Argument(help="File to import (PDF, DOCX, CSV, etc.)"),
+    title: str = typer.Option("", help="Note title (default: filename)"),
+    category: str = typer.Option("", help="Note category"),
+    tags: str = typer.Option("", help="Comma-separated tags"),
+):
+    """Import a file into the knowledge base."""
+    from kb.core.import_file import import_file
+
+    if not file_path.is_file():
+        console.print(f"[red]File not found: {file_path}[/red]")
+        raise typer.Exit(1)
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    override_title = title.strip() or None
+    override_category = category.strip() or None
+
+    ctx = _get_context()
+    src_cfg = ctx.config.sources.get("imported") if ctx.config else None
+    try:
+        note = import_file(
+            file_path,
+            vault=ctx.vault,
+            db=ctx.db,
+            notes_dir=ctx.notes_dir,
+            attachments_dir=ctx.attachments_dir,
+            title=override_title,
+            category=override_category,
+            tags=tag_list,
+            source_config=src_cfg,
+        )
+    except ImportFileError as e:
+        console.print(f"[red]Import failed: {e}[/red]")
         raise typer.Exit(1)
     finally:
         ctx.close()
