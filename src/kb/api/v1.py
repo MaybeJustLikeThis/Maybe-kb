@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, File, Query, UploadFile
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from kb.api import responses
@@ -245,6 +245,65 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             if tmp_path is not None:
                 tmp_path.unlink(missing_ok=True)
         return responses.ok({"path": rel_path})
+
+    @router.post("/import")
+    async def import_file_endpoint(
+        file: UploadFile = File(...),
+        title: str = Form(""),
+        category: str = Form(""),
+        tags: str = Form(""),
+    ):
+        """Import a file (PDF, DOCX, CSV, etc.) into the knowledge base."""
+        import tempfile
+        from kb.core.import_file import import_file, ImportFileError
+
+        tmp_path: Path | None = None
+        try:
+            suffix = Path(file.filename or ".bin").suffix
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=suffix,
+            ) as tmp:
+                content = await file.read()
+                tmp.write(content)
+                tmp_path = Path(tmp.name)
+
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+            override_title = title.strip() or None
+            override_category = category.strip() or None
+            src_cfg = ctx.config.sources.get("imported") if ctx.config else None
+
+            # Use original filename as default title
+            if override_title is None and file.filename:
+                override_title = Path(file.filename).stem
+
+            note = import_file(
+                tmp_path,
+                vault=ctx.vault,
+                db=ctx.db,
+                notes_dir=ctx.notes_dir,
+                attachments_dir=ctx.attachments_dir,
+                title=override_title,
+                category=override_category,
+                tags=tag_list,
+                source_config=src_cfg,
+            )
+            _index_note_if_possible(note.file_id)
+        except ImportFileError as exc:
+            return responses.operation_failed(
+                "IMPORT_FAILED",
+                str(exc),
+            )
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+
+        return responses.ok({
+            "file_id": note.file_id,
+            "title": note.title,
+            "category": note.category,
+            "content_type": note.content_type,
+            "source_project": note.source_project,
+        })
 
     @router.post("/chat/ask")
     def chat_ask(body: ChatRequest):

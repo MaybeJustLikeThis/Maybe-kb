@@ -606,3 +606,89 @@ def test_v1_chat_ask_returns_sources(
     assert body["data"]["answer"] == "Answer"
     assert body["data"]["sources"][0]["file_id"] == "notes/a.md"
     assert body["data"]["sources"][0]["attachments"] == ["attachments/a.pdf"]
+
+
+# --- Import endpoint tests ---
+
+
+def test_v1_import_pdf(client: TestClient, tmp_path: Path) -> None:
+    """POST /api/v1/import converts and ingests a PDF file."""
+    from unittest.mock import patch, MagicMock
+
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\n%%EOF")
+
+    with (
+        patch("kb.core.import_file.store_attachment") as mock_store,
+        patch("kb.core.import_file.convert_file") as mock_convert,
+    ):
+        mock_store.return_value = "attachments/2026/06/abc123.pdf"
+        mock_convert.return_value = MagicMock(
+            text="# Test PDF\n\nContent.",
+            metadata={"converter": "markitdown", "source_file": "test.pdf"},
+        )
+
+        with open(pdf_path, "rb") as f:
+            response = client.post(
+                "/api/v1/import",
+                files={"file": ("test.pdf", f, "application/pdf")},
+            )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert_success_envelope(payload)
+    assert payload["data"]["title"] == "test"
+    assert payload["data"]["content_type"] == "pdf"
+
+
+def test_v1_import_with_options(client: TestClient, tmp_path: Path) -> None:
+    """POST /api/v1/import accepts title, category, tags."""
+    from unittest.mock import patch, MagicMock
+
+    pdf_path = tmp_path / "report.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n%%EOF")
+
+    with (
+        patch("kb.core.import_file.store_attachment") as mock_store,
+        patch("kb.core.import_file.convert_file") as mock_convert,
+    ):
+        mock_store.return_value = "attachments/2026/06/abc123.pdf"
+        mock_convert.return_value = MagicMock(
+            text="content",
+            metadata={"converter": "markitdown", "source_file": "report.pdf"},
+        )
+
+        with open(pdf_path, "rb") as f:
+            response = client.post(
+                "/api/v1/import",
+                files={"file": ("report.pdf", f, "application/pdf")},
+                data={"title": "My Report", "category": "AI", "tags": "ml,research"},
+            )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["data"]["title"] == "My Report"
+
+
+def test_v1_import_failure(client: TestClient, tmp_path: Path) -> None:
+    """POST /api/v1/import returns error on conversion failure."""
+    from unittest.mock import patch
+    from kb.parsers.markitdown_converter import ConversionError
+
+    pdf_path = tmp_path / "broken.pdf"
+    pdf_path.write_bytes(b"not a pdf")
+
+    with (
+        patch("kb.core.import_file.store_attachment") as mock_store,
+        patch("kb.core.import_file.convert_file") as mock_convert,
+    ):
+        mock_store.return_value = "attachments/2026/06/abc123.pdf"
+        mock_convert.side_effect = ConversionError("Conversion failed: bad file")
+
+        with open(pdf_path, "rb") as f:
+            response = client.post(
+                "/api/v1/import",
+                files={"file": ("broken.pdf", f, "application/pdf")},
+            )
+
+    assert response.status_code == 500
