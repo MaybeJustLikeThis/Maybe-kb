@@ -32,6 +32,36 @@ def test_store_attachment(tmp_path: Path):
     assert stored.read_bytes() == b"\x89PNG fake image data"
 
 
+def test_store_attachment_with_article_name(tmp_path: Path):
+    """article_name inserts a subdirectory between month and hash."""
+    source = tmp_path / "photo.png"
+    source.write_bytes(b"\x89PNG fake image data")
+
+    vault_path = tmp_path / "vault"
+    vault_path.mkdir()
+
+    result = store_attachment(source, vault_path, article_name="JS高级笔记")
+    parts = result.split("/")
+    # attachments / YYYY / MM / article_name / hash.png
+    assert len(parts) == 5
+    assert parts[3] == "JS高级笔记"
+    assert parts[4].endswith(".png")
+    assert (vault_path / result).is_file()
+
+
+def test_store_attachment_article_name_rejects_path_traversal(tmp_path: Path):
+    """article_name with path separators or .. is rejected."""
+    source = tmp_path / "photo.png"
+    source.write_bytes(b"data")
+
+    vault_path = tmp_path / "vault"
+    vault_path.mkdir()
+
+    for bad in ("../etc", "foo/bar", "..", "a\\b"):
+        with pytest.raises(ValueError, match="Unsafe article name"):
+            store_attachment(source, vault_path, article_name=bad)
+
+
 def test_store_deduplicates(tmp_path: Path):
     """Same content is stored only once."""
     source1 = tmp_path / "a.png"

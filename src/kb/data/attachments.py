@@ -2,10 +2,18 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime
 from pathlib import Path
 
 ATTACHMENTS_DIR = "attachments"
+_ARTICLE_NAME_RE = re.compile(r"^[^./\\][^/\\]*$")
+
+
+def _validate_article_name(name: str) -> None:
+    """Reject article names that could escape the directory."""
+    if not _ARTICLE_NAME_RE.match(name) or ".." in name:
+        raise ValueError(f"Unsafe article name: {name}")
 
 
 def _content_hash(data: bytes) -> str:
@@ -18,15 +26,21 @@ def store_attachment(
     vault_path: Path,
     *,
     attachments_dir: str = ATTACHMENTS_DIR,
+    article_name: str | None = None,
 ) -> str:
     """Store an attachment file, returning its relative path.
 
     Deduplicates by content hash: same content -> same stored file.
     Uses date-based subdirectory: {attachments_dir}/YYYY/MM/{hash}{ext}
+    When *article_name* is given the path becomes:
+        {attachments_dir}/YYYY/MM/{article_name}/{hash}{ext}
     """
     data = source.read_bytes()
     ext = source.suffix.lower()
     hash_name = _content_hash(data)
+
+    if article_name is not None:
+        _validate_article_name(article_name)
 
     attachments_root = _resolve_attachments_root(vault_path, attachments_dir)
     existing_path = _find_existing_attachment(
@@ -40,7 +54,11 @@ def store_attachment(
         return existing_path
 
     now = datetime.now()
-    dest = attachments_root / str(now.year) / f"{now.month:02d}" / f"{hash_name}{ext}"
+    month_dir = attachments_root / str(now.year) / f"{now.month:02d}"
+    if article_name is not None:
+        dest = month_dir / article_name / f"{hash_name}{ext}"
+    else:
+        dest = month_dir / f"{hash_name}{ext}"
     resolved_dest = _resolve_attachment_path(
         dest,
         vault_root=vault_path.resolve(),
