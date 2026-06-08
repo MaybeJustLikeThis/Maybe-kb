@@ -238,7 +238,7 @@ def test_rag_query_stream_handles_failure(tmp_path):
 
     chunks = list(rag_query_stream("test", db, MockEmbedding(), MockVectorStore(), FailingLLM()))
     assert len(chunks) == 1
-    assert "错误" in chunks[0].text
+    assert "失败" in chunks[0].text
 
 
 def test_build_rag_sources_includes_note_metadata(tmp_path):
