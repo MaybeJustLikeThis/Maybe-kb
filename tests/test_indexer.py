@@ -10,7 +10,7 @@ from kb.data.embedding import EmbeddingProvider, EmbeddingResult
 from kb.data.vector import VectorRecord
 from kb.core.config import GeneralConfig, KBConfig
 from kb.core.context import AppContext
-from kb.core.models import Note
+from kb.data.models import Note
 from kb.core.indexer import index_files, index_vectors
 
 

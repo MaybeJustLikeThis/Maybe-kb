@@ -7,7 +7,7 @@ import anyio
 import pytest
 
 from kb.core.config import KBConfig, EmbeddingConfig, LLMConfig
-from kb.core.models import Note
+from kb.data.models import Note
 from kb.data.database import Database
 
 

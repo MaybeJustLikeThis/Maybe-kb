@@ -3,7 +3,7 @@ from pathlib import Path
 from kb.core.config import KBConfig, ObsidianConfig
 from kb.core.context import AppContext
 from kb.core.health import get_system_health
-from kb.core.models import Note
+from kb.data.models import Note
 from kb.data.database import Database
 from kb.data.vector import VectorStore
 

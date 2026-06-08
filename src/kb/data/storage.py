@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from kb.core.models import Note
+from kb.data.models import Note
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 

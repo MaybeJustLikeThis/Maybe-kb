@@ -5,7 +5,7 @@ import pytest
 
 from kb.core.config import SourceConfig
 from kb.core.ingest import ingest
-from kb.core.models import IngestRequest
+from kb.data.models import IngestRequest
 from kb.data.database import Database
 
 

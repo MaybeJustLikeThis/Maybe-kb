@@ -5,7 +5,7 @@ from pathlib import Path
 
 from kb.core import services
 from kb.core.config import SourceConfig
-from kb.core.models import IngestRequest, Note
+from kb.data.models import IngestRequest, Note
 from kb.data.database import Database
 
 

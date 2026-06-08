@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from kb.core.models import Note
+from kb.data.models import Note
 from kb.data.storage import (
     make_slug,
     parse_markdown_file,

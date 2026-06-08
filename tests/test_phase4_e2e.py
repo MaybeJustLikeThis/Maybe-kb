@@ -345,7 +345,7 @@ def test_search_result_to_context_roundtrip():
     from kb.core.search import SearchResult
     from kb.core.rag import format_context, build_rag_prompt
     from kb.data.database import Database
-    from kb.core.models import Note
+    from kb.data.models import Note
 
     db = Database(Path("/tmp/phase4-roundtrip.db"))
     db.initialize()
@@ -383,7 +383,7 @@ def test_rag_query_orchestration_with_mocks(monkeypatch: pytest.MonkeyPatch):
     from kb.data.database import Database
     from kb.data.llm import LLMResponse
     from kb.data.embedding import EmbeddingProvider, EmbeddingResult
-    from kb.core.models import Note
+    from kb.data.models import Note
 
     db = Database(Path("/tmp/phase4-orch.db"))
     db.initialize()

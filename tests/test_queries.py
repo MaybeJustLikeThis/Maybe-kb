@@ -6,7 +6,7 @@ import pytest
 from kb.core import queries
 from kb.core.config import GeneralConfig, KBConfig, ServerConfig
 from kb.core.context import AppContext
-from kb.core.models import Note
+from kb.data.models import Note
 
 
 @pytest.fixture

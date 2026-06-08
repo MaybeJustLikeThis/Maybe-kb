@@ -18,7 +18,7 @@ def tmp_vault(tmp_path: Path):
     ctx = AppContext.from_config(_fake_config(), vault=tmp_path,
                                  with_embedding=False, with_llm=False)
 
-    from kb.core.models import Note
+    from kb.data.models import Note
 
     note1 = Note(
         file_id="notes/tech/docker.md", title="Docker 基础",
@@ -95,7 +95,7 @@ def test_get_categories_without_count(tmp_vault):
 
 def test_list_notes_sort(tmp_vault):
     tmp_path, client = tmp_vault
-    from kb.core.models import Note
+    from kb.data.models import Note
 
     note_a = Note(
         file_id="notes/sort_a.md", title="Sort Note A",

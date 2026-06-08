@@ -1,7 +1,7 @@
 """Tests for data models."""
 import pytest
 from datetime import datetime
-from kb.core.models import IngestRequest, Note, parse_tags, normalize_date
+from kb.data.models import IngestRequest, Note, parse_tags, normalize_date
 
 
 def test_note_from_dict_minimal():

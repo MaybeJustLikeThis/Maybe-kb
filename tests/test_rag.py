@@ -1,6 +1,6 @@
 """Tests for RAG orchestration."""
 from pathlib import Path
-from kb.core.models import Note
+from kb.data.models import Note
 from kb.core.search import SearchResult
 from kb.core.rag import format_context, build_rag_prompt, RAG_SYSTEM_PROMPT, rag_query_stream
 from kb.data.llm import LLMResponse

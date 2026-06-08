@@ -129,7 +129,7 @@ def add_note(
 ):
     """Create a new note."""
     from kb.core.ingest import ingest
-    from kb.core.models import IngestRequest
+    from kb.data.models import IngestRequest
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     cat = category.strip() or None

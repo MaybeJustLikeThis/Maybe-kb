@@ -48,7 +48,7 @@ def create_mcp_server(config: KBConfig):
         include_content: bool = True,
     ) -> dict:
         """Shared logic for kb_add and kb_save."""
-        from kb.core.models import IngestRequest
+        from kb.data.models import IngestRequest
         from kb.core.ingest import ingest
 
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []

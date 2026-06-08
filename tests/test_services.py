@@ -223,7 +223,7 @@ def test_delete_note_not_found(tmp_path: Path):
 
 def test_note_response_includes_new_fields(tmp_path: Path):
     """note_to_response includes source fields."""
-    from kb.core.models import Note
+    from kb.data.models import Note
     from kb.core.serializers import note_to_response
     note = Note(
         file_id="notes/x.md", title="X",

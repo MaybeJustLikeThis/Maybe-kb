@@ -85,7 +85,7 @@ def create_api_router(ctx: AppContext) -> APIRouter:
 
     @router.post("/notes")
     def create_note(body: NoteCreate):
-        from kb.core.models import IngestRequest
+        from kb.data.models import IngestRequest
         from kb.core.ingest import ingest
 
         try:

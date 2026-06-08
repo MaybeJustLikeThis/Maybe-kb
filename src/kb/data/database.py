@@ -7,7 +7,7 @@ from typing import Any
 
 import jieba
 
-from kb.core.models import Note
+from kb.data.models import Note
 
 # Suppress jieba startup logs
 jieba.setLogLevel(20)

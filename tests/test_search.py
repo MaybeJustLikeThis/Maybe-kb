@@ -18,7 +18,7 @@ def test_rrf_score_decreases_with_rank():
 def test_hybrid_search_both_sources(tmp_path):
     """Hybrid search fuses FTS5 and semantic results."""
     from kb.data.database import Database
-    from kb.core.models import Note
+    from kb.data.models import Note
     from kb.data.embedding import LocalEmbeddingProvider
     from kb.data.vector import VectorStore, VectorRecord
 

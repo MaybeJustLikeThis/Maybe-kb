@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from kb.core.ingest import ingest
-from kb.core.models import IngestRequest, Note
+from kb.data.models import IngestRequest, Note
 from kb.data.attachments import store_attachment
 from kb.data.database import Database
 from kb.parsers.markitdown_converter import (

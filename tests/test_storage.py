@@ -109,7 +109,7 @@ def test_write_and_roundtrip(tmp_path: Path):
 
 def test_write_new_note(tmp_path: Path):
     """write_markdown_file creates file with frontmatter + content."""
-    from kb.core.models import Note
+    from kb.data.models import Note
 
     note = Note(
         file_id="tech/new.md",
