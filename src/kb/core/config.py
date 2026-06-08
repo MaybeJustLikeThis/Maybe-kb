@@ -29,7 +29,7 @@ class LLMConfig:
 @dataclass(frozen=True)
 class RAGConfig:
     top_k: int = 5
-    truncate_chars: int = 800
+    max_context_chars: int = 6000
 
 
 @dataclass(frozen=True)

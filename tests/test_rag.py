@@ -20,13 +20,6 @@ def test_build_rag_prompt_contains_query_and_context():
     assert "笔记内容" in prompt
 
 
-def test_format_context_truncation_logic():
-    """Content > 800 chars gets truncated with '...'."""
-    long_text = "x" * 1000
-    result = long_text[:800] + "..."
-    assert len(result) == 803
-
-
 def test_rag_system_prompt_exists():
     assert len(RAG_SYSTEM_PROMPT) > 50
     assert "知识库" in RAG_SYSTEM_PROMPT
