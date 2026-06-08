@@ -19,7 +19,7 @@ from kb.api.schemas import (
 from kb.core import queries, services
 from kb.core.context import AppContext
 from kb.core.health import get_system_health
-from kb.core.indexer import index_files, index_note_vectors
+from kb.core.indexer import index_files, index_note_if_possible
 from kb.core.open_targets import build_obsidian_open_target
 from kb.core.rag import rag_query, rag_query_stream, rag_source_to_dict
 from kb.core.serializers import note_to_detail
@@ -37,18 +37,6 @@ def _not_found_or_path_error(exc: Exception):
 def create_v1_router(ctx: AppContext) -> APIRouter:
     """Create the normalized v1 API router."""
     router = APIRouter()
-
-    def _index_note_if_possible(file_id: str) -> int:
-        if ctx.embedding is None:
-            return 0
-        return index_note_vectors(
-            ctx.vault,
-            ctx.db,
-            ctx.embedding,
-            file_id,
-            vector_store=ctx.vector_store,
-            index_dir=ctx.index_dir,
-        )
 
     @router.get("/notes")
     def list_notes(
@@ -94,7 +82,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 ctx.vault, ctx.db,
                 notes_dir=ctx.notes_dir,
             )
-            _index_note_if_possible(note.file_id)
+            index_note_if_possible(ctx, note.file_id)
         except ValueError:
             return responses.path_traversal_blocked()
         return responses.ok(note_to_detail(note))
@@ -136,7 +124,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
         }
         try:
             note = services.update_note(ctx.vault, ctx.db, file_id, **fields)
-            _index_note_if_possible(note.file_id)
+            index_note_if_possible(ctx, note.file_id)
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
         return responses.ok(note_to_detail(note))
@@ -287,7 +275,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                 tags=tag_list,
                 source_config=src_cfg,
             )
-            _index_note_if_possible(note.file_id)
+            index_note_if_possible(ctx, note.file_id)
         except ImportFileError as exc:
             return responses.operation_failed(
                 "IMPORT_FAILED",

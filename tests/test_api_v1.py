@@ -383,7 +383,7 @@ def test_v1_create_note_updates_vector_index(
         fake_create_embedding_provider,
     )
     monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
-    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+    monkeypatch.setattr("kb.core.indexer.index_note_vectors", fake_index_note_vectors)
 
     client = TestClient(create_app(KBConfig(vault_path=tmp_path.resolve(), llm=None)))
     client.post("/api/v1/index/rebuild")
@@ -429,7 +429,7 @@ def test_v1_update_note_updates_vector_index(
         fake_create_embedding_provider,
     )
     monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
-    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+    monkeypatch.setattr("kb.core.indexer.index_note_vectors", fake_index_note_vectors)
 
     client = TestClient(create_app(KBConfig(vault_path=tmp_path.resolve(), llm=None)))
     client.post("/api/v1/index/rebuild")
@@ -500,7 +500,7 @@ def test_v1_uses_configured_vault_subpaths(
         fake_create_embedding_provider,
     )
     monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
-    monkeypatch.setattr("kb.api.v1.index_note_vectors", fake_index_note_vectors)
+    monkeypatch.setattr("kb.core.indexer.index_note_vectors", fake_index_note_vectors)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),

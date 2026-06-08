@@ -278,7 +278,7 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
         return 1
 
     monkeypatch.setattr("kb.core.context.AppContext.ensure_embedding", fake_ensure_embedding)
-    monkeypatch.setattr("kb.mcp_server.index_note_vectors", fake_index_note_vectors)
+    monkeypatch.setattr("kb.core.indexer.index_note_vectors", fake_index_note_vectors)
 
     config = KBConfig(
         vault_path=tmp_path.resolve(),

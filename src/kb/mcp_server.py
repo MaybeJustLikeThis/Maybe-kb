@@ -5,7 +5,7 @@ from pathlib import Path
 
 from kb.core.config import KBConfig
 from kb.core.context import AppContext
-from kb.core.indexer import index_note_vectors
+from kb.core.indexer import index_note_if_possible
 from kb.core.rag import rag_query
 from kb.core.search import hybrid_search
 from kb.core.serializers import note_row_to_dict
@@ -35,23 +35,6 @@ def create_mcp_server(config: KBConfig):
     def _blank_to_none(value: str) -> str | None:
         stripped = value.strip()
         return stripped or None
-
-    def _index_note_if_possible(file_id: str) -> tuple[int, str | None]:
-        try:
-            provider = ctx.ensure_embedding()
-            if provider is None:
-                return 0, "embedding provider is not configured"
-            count = index_note_vectors(
-                vault,
-                db,
-                provider,
-                file_id,
-                vector_store=ctx.vector_store,
-                index_dir=ctx.index_dir,
-            )
-            return count, None
-        except Exception as exc:
-            return 0, str(exc)
 
     @mcp.tool()
     def kb_search(query: str, limit: int = 20) -> list[dict]:
@@ -160,7 +143,7 @@ def create_mcp_server(config: KBConfig):
             )
         except ValueError as e:
             return {"error": str(e)}
-        indexed_vectors, index_error = _index_note_if_possible(note.file_id)
+        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
         return {
             "file_id": note.file_id,
             "title": note.title,
@@ -223,7 +206,7 @@ def create_mcp_server(config: KBConfig):
             )
         except ValueError as e:
             return {"error": str(e)}
-        indexed_vectors, index_error = _index_note_if_possible(note.file_id)
+        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
         return {
             "file_id": note.file_id,
             "title": note.title,

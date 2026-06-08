@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -20,6 +20,10 @@ from kb.data.storage import (
 from kb.data.vector import VectorRecord, VectorStore
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from kb.core.context import AppContext
+
 UNCATEGORIZED_CATEGORY = "未分类"
 
 _FRONTMATTER_BOUNDARY_RE = re.compile(
@@ -300,3 +304,28 @@ def index_vectors(
         store.close()
 
     return indexed
+
+
+def index_note_if_possible(
+    ctx: AppContext,
+    file_id: str,
+) -> tuple[int, str | None]:
+    """Index note vectors if embedding is available. Safe to call always.
+
+    Returns (vector_count, error_message). error_message is None on success.
+    """
+    try:
+        provider = ctx.ensure_embedding()
+        if provider is None:
+            return 0, "embedding provider is not configured"
+        count = index_note_vectors(
+            ctx.vault,
+            ctx.db,
+            provider,
+            file_id,
+            vector_store=ctx.vector_store,
+            index_dir=ctx.index_dir,
+        )
+        return count, None
+    except Exception as exc:
+        return 0, str(exc)
