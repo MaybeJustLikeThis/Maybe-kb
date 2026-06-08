@@ -19,6 +19,14 @@ class LLMResponse:
 class LLMProvider(ABC):
     """Abstract interface for LLM text generation."""
 
+    def _build_messages(self, prompt: str, system_prompt: str) -> list[dict]:
+        """Build OpenAI-style messages list from prompt and optional system prompt."""
+        messages: list[dict] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
     @abstractmethod
     def generate(self, prompt: str, *, system_prompt: str = "") -> LLMResponse: ...
 
@@ -40,10 +48,7 @@ class OllamaLLMProvider(LLMProvider):
         self._base_url = base_url
 
     def generate(self, prompt: str, *, system_prompt: str = "") -> LLMResponse:
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages = self._build_messages(prompt, system_prompt)
 
         with httpx.Client(timeout=120) as client:
             resp = client.post(
@@ -62,10 +67,7 @@ class OllamaLLMProvider(LLMProvider):
     def generate_stream(self, prompt: str, *, system_prompt: str = ""):
         import json as _json
 
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages = self._build_messages(prompt, system_prompt)
 
         with httpx.Client(timeout=120) as client:
             with client.stream(
@@ -99,10 +101,7 @@ class OpenAILLMProvider(LLMProvider):
         self._model = model
 
     def generate(self, prompt: str, *, system_prompt: str = "") -> LLMResponse:
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages = self._build_messages(prompt, system_prompt)
 
         with httpx.Client(timeout=60) as client:
             resp = client.post(
@@ -126,10 +125,7 @@ class OpenAILLMProvider(LLMProvider):
     def generate_stream(self, prompt: str, *, system_prompt: str = ""):
         import json as _json
 
-        messages: list[dict] = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        messages = self._build_messages(prompt, system_prompt)
 
         with httpx.Client(timeout=60) as client:
             with client.stream(
