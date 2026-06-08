@@ -110,39 +110,39 @@ def test_web_ui_full_workflow(project: Path):
     client = TestClient(web_app)
 
     # Create notes
-    r = client.post("/api/notes", json={
+    r = client.post("/api/v1/notes", json={
         "title": "Web Test",
         "content": "# Hello\n\nWorld",
         "category": "tech",
         "tags": ["test"],
     })
     assert r.status_code == 200
-    file_id = r.json()["file_id"]
+    file_id = r.json()["data"]["file_id"]
 
     # List
-    r = client.get("/api/notes")
+    r = client.get("/api/v1/notes")
     assert r.status_code == 200
-    assert len(r.json()) >= 1
+    assert len(r.json()["data"]) >= 1
 
     # Search
-    r = client.get("/api/search", params={"q": "Hello"})
+    r = client.get("/api/v1/search", params={"q": "Hello"})
     assert r.status_code == 200
-    assert len(r.json()) >= 1
+    assert len(r.json()["data"]) >= 1
 
     # Get
-    r = client.get(f"/api/notes/{file_id}")
+    r = client.get(f"/api/v1/notes/{file_id}")
     assert r.status_code == 200
 
     # Update
-    r = client.put(f"/api/notes/{file_id}", json={"title": "Updated Title"})
+    r = client.put(f"/api/v1/notes/{file_id}", json={"title": "Updated Title"})
     assert r.status_code == 200
-    assert r.json()["title"] == "Updated Title"
+    assert r.json()["data"]["title"] == "Updated Title"
 
     # Delete
-    r = client.delete(f"/api/notes/{file_id}")
+    r = client.delete(f"/api/v1/notes/{file_id}")
     assert r.status_code == 200
 
-    r = client.get(f"/api/notes/{file_id}")
+    r = client.get(f"/api/v1/notes/{file_id}")
     assert r.status_code == 404
 
 

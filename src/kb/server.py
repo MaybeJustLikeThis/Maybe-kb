@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from kb.api.v1 import create_v1_router
 from kb.core.config import KBConfig
 from kb.core.context import AppContext
-from kb.routes import create_api_router
 
 
 def _resolve_static_path(static_dir: Path, full_path: str) -> Path:
@@ -42,8 +41,6 @@ def create_app(kb_config: KBConfig) -> FastAPI:
 
     app = FastAPI(title="kb", version="0.1.0", lifespan=lifespan)
 
-    router = create_api_router(ctx)
-    app.include_router(router, prefix="/api")
     v1_router = create_v1_router(ctx)
     app.include_router(v1_router, prefix="/api/v1")
 

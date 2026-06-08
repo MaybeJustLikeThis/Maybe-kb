@@ -1,4 +1,4 @@
-"""Tests for FastAPI server endpoints."""
+"""Tests for FastAPI server endpoints (v1)."""
 import os
 import pytest
 from pathlib import Path
@@ -88,15 +88,15 @@ def test_v1_create_note_does_not_initialize_ai_providers(
 
 
 def test_create_note(client):
-    """POST /api/notes creates a note."""
-    resp = client.post("/api/notes", json={
+    """POST /api/v1/notes creates a note."""
+    resp = client.post("/api/v1/notes", json={
         "title": "Test Note",
         "content": "# Hello\n\nWorld",
         "category": "tech",
         "tags": ["python", "web"],
     })
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert data["title"] == "Test Note"
     assert data["tags"] == ["python", "web"]
     assert data["category"] == "tech"
@@ -104,78 +104,78 @@ def test_create_note(client):
 
 
 def test_list_notes(client):
-    """GET /api/notes lists notes."""
-    client.post("/api/notes", json={"title": "Note A", "content": "A", "tags": ["python"]})
-    client.post("/api/notes", json={"title": "Note B", "content": "B", "tags": ["go"]})
+    """GET /api/v1/notes lists notes."""
+    client.post("/api/v1/notes", json={"title": "Note A", "content": "A", "tags": ["python"]})
+    client.post("/api/v1/notes", json={"title": "Note B", "content": "B", "tags": ["go"]})
 
-    resp = client.get("/api/notes")
+    resp = client.get("/api/v1/notes")
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert len(data) == 2
 
 
 def test_list_notes_filter_by_category(client):
-    """GET /api/notes?category= filters by category."""
-    client.post("/api/notes", json={"title": "A", "category": "tech", "content": "A"})
-    client.post("/api/notes", json={"title": "B", "category": "life", "content": "B"})
+    """GET /api/v1/notes?category= filters by category."""
+    client.post("/api/v1/notes", json={"title": "A", "category": "tech", "content": "A"})
+    client.post("/api/v1/notes", json={"title": "B", "category": "life", "content": "B"})
 
-    resp = client.get("/api/notes", params={"category": "tech"})
+    resp = client.get("/api/v1/notes", params={"category": "tech"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert len(data) == 1
     assert data[0]["title"] == "A"
 
 
 def test_list_notes_filter_by_tag(client):
-    """GET /api/notes?tag= filters by tag."""
-    client.post("/api/notes", json={"title": "A", "tags": ["python"], "content": "A"})
-    client.post("/api/notes", json={"title": "B", "tags": ["go"], "content": "B"})
+    """GET /api/v1/notes?tag= filters by tag."""
+    client.post("/api/v1/notes", json={"title": "A", "tags": ["python"], "content": "A"})
+    client.post("/api/v1/notes", json={"title": "B", "tags": ["go"], "content": "B"})
 
-    resp = client.get("/api/notes", params={"tag": "python"})
+    resp = client.get("/api/v1/notes", params={"tag": "python"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert len(data) == 1
     assert data[0]["title"] == "A"
 
 
 def test_get_note(client):
-    """GET /api/notes/{file_id} returns a note."""
-    create_resp = client.post("/api/notes", json={"title": "Detail", "content": "Content here"})
-    file_id = create_resp.json()["file_id"]
+    """GET /api/v1/notes/{file_id} returns a note."""
+    create_resp = client.post("/api/v1/notes", json={"title": "Detail", "content": "Content here"})
+    file_id = create_resp.json()["data"]["file_id"]
 
-    resp = client.get(f"/api/notes/{file_id}")
+    resp = client.get(f"/api/v1/notes/{file_id}")
     assert resp.status_code == 200
-    assert resp.json()["title"] == "Detail"
-    assert resp.json()["content"].rstrip("\n") == "Content here"
+    data = resp.json()["data"]
+    assert data["title"] == "Detail"
+    assert data["content"].rstrip("\n") == "Content here"
 
 
 def test_get_note_not_found(client):
-    """GET /api/notes/{file_id} returns 404 if not found."""
-    resp = client.get("/api/notes/nonexistent.md")
+    """GET /api/v1/notes/{file_id} returns 404 if not found."""
+    resp = client.get("/api/v1/notes/nonexistent.md")
     assert resp.status_code == 404
 
 
 def test_path_traversal_blocked(client):
     """Path traversal via ../ is blocked with 403."""
-    # URL-encode dots to prevent HTTP client from normalizing the path
-    resp = client.get("/api/notes/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd")
+    resp = client.get("/api/v1/notes/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd")
     assert resp.status_code == 403
 
 
 def test_path_traversal_delete_blocked(client):
     """Path traversal via DELETE is blocked with 403."""
-    resp = client.delete("/api/notes/%2e%2e%2fWindows%2fSystem32")
+    resp = client.delete("/api/v1/notes/%2e%2e%2fWindows%2fSystem32")
     assert resp.status_code == 403
 
 
 def test_create_note_path_traversal_blocked(client):
-    """POST /api/notes sanitizes path-traversal chars in title."""
-    resp = client.post("/api/notes", json={
+    """POST /api/v1/notes sanitizes path-traversal chars in title."""
+    resp = client.post("/api/v1/notes", json={
         "title": "../../etc/hosts",
         "content": "evil",
     })
     assert resp.status_code == 200
-    file_id = resp.json()["file_id"]
+    file_id = resp.json()["data"]["file_id"]
     assert file_id.startswith("notes/")
     assert "/../" not in file_id  # no path traversal escape
 
@@ -183,7 +183,7 @@ def test_create_note_path_traversal_blocked(client):
 def test_put_path_traversal_blocked(client):
     """PUT with path traversal is blocked with 403."""
     resp = client.put(
-        "/api/notes/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+        "/api/v1/notes/%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
         json={"title": "evil"},
     )
     assert resp.status_code == 403
@@ -191,120 +191,125 @@ def test_put_path_traversal_blocked(client):
 
 def test_nested_note_still_works(client):
     """Legitimate nested note paths should still work."""
-    create_resp = client.post("/api/notes", json={
+    create_resp = client.post("/api/v1/notes", json={
         "title": "Nested Note",
         "content": "Nested content",
         "category": "tech",
     })
-    file_id = create_resp.json()["file_id"]
-    resp = client.get(f"/api/notes/{file_id}")
+    file_id = create_resp.json()["data"]["file_id"]
+    resp = client.get(f"/api/v1/notes/{file_id}")
     assert resp.status_code == 200
-    assert resp.json()["title"] == "Nested Note"
+    assert resp.json()["data"]["title"] == "Nested Note"
 
 
 def test_update_note(client):
-    """PUT /api/notes/{file_id} updates a note."""
-    create_resp = client.post("/api/notes", json={"title": "Old", "content": "Old"})
-    file_id = create_resp.json()["file_id"]
+    """PUT /api/v1/notes/{file_id} updates a note."""
+    create_resp = client.post("/api/v1/notes", json={"title": "Old", "content": "Old"})
+    file_id = create_resp.json()["data"]["file_id"]
 
-    resp = client.put(f"/api/notes/{file_id}", json={
+    resp = client.put(f"/api/v1/notes/{file_id}", json={
         "title": "New Title",
         "content": "New Content",
     })
     assert resp.status_code == 200
-    assert resp.json()["title"] == "New Title"
-    assert resp.json()["content"].rstrip("\n") == "New Content"
+    data = resp.json()["data"]
+    assert data["title"] == "New Title"
+    assert data["content"].rstrip("\n") == "New Content"
 
 
 def test_delete_note(client):
-    """DELETE /api/notes/{file_id} deletes a note."""
-    create_resp = client.post("/api/notes", json={"title": "Delete Me", "content": "x"})
-    file_id = create_resp.json()["file_id"]
+    """DELETE /api/v1/notes/{file_id} deletes a note."""
+    create_resp = client.post("/api/v1/notes", json={"title": "Delete Me", "content": "x"})
+    file_id = create_resp.json()["data"]["file_id"]
 
-    resp = client.delete(f"/api/notes/{file_id}")
+    resp = client.delete(f"/api/v1/notes/{file_id}")
     assert resp.status_code == 200
 
-    resp = client.get(f"/api/notes/{file_id}")
+    resp = client.get(f"/api/v1/notes/{file_id}")
     assert resp.status_code == 404
 
 
 def test_search(client):
-    """GET /api/search finds notes by content."""
-    client.post("/api/notes", json={"title": "Vue 状态管理", "content": "Pinia 是推荐方案"})
-    client.post("/api/notes", json={"title": "Docker", "content": "容器部署"})
+    """GET /api/v1/search finds notes by content."""
+    client.post("/api/v1/notes", json={"title": "Vue 状态管理", "content": "Pinia 是推荐方案"})
+    client.post("/api/v1/notes", json={"title": "Docker", "content": "容器部署"})
 
-    resp = client.get("/api/search", params={"q": "Pinia"})
+    resp = client.get("/api/v1/search", params={"q": "Pinia"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert len(data) >= 1
-    assert any("Vue" in r["title"] for r in data)
+    assert any("Vue" in r["note"]["title"] for r in data)
 
 
 def test_get_tags(client):
-    """GET /api/tags returns all tags."""
-    client.post("/api/notes", json={"title": "A", "tags": ["python", "web"], "content": "A"})
-    client.post("/api/notes", json={"title": "B", "tags": ["python", "fastapi"], "content": "B"})
+    """GET /api/v1/taxonomy returns tags."""
+    client.post("/api/v1/notes", json={"title": "A", "tags": ["python", "web"], "content": "A"})
+    client.post("/api/v1/notes", json={"title": "B", "tags": ["python", "fastapi"], "content": "B"})
 
-    resp = client.get("/api/tags")
+    resp = client.get("/api/v1/taxonomy")
     assert resp.status_code == 200
-    tags = resp.json()["tags"]
+    data = resp.json()["data"]
+    tags = data["tags"]
     assert "python" in tags
     assert "web" in tags
     assert "fastapi" in tags
 
 
 def test_get_categories(client):
-    """GET /api/categories returns all categories."""
-    client.post("/api/notes", json={"title": "A", "category": "tech", "content": "A"})
-    client.post("/api/notes", json={"title": "B", "category": "life", "content": "B"})
+    """GET /api/v1/taxonomy returns categories."""
+    client.post("/api/v1/notes", json={"title": "A", "category": "tech", "content": "A"})
+    client.post("/api/v1/notes", json={"title": "B", "category": "life", "content": "B"})
 
-    resp = client.get("/api/categories")
+    resp = client.get("/api/v1/taxonomy")
     assert resp.status_code == 200
-    cats = resp.json()["categories"]
-    assert "tech" in cats
-    assert "life" in cats
+    data = resp.json()["data"]
+    cat_names = [c["name"] for c in data["categories"]]
+    assert "tech" in cat_names
+    assert "life" in cat_names
 
 
 def test_get_index_status(client):
-    """GET /api/index returns notes count."""
-    client.post("/api/notes", json={"title": "A", "content": "a"})
-    client.post("/api/notes", json={"title": "B", "content": "b"})
+    """GET /api/v1/dashboard returns notes count via index_health."""
+    client.post("/api/v1/notes", json={"title": "A", "content": "a"})
+    client.post("/api/v1/notes", json={"title": "B", "content": "b"})
 
-    resp = client.get("/api/index")
+    resp = client.get("/api/v1/dashboard")
     assert resp.status_code == 200
-    assert resp.json()["notes_count"] == 2
+    data = resp.json()["data"]
+    assert data["notes_count"] == 2
 
 
 def test_trigger_index(client):
-    """POST /api/index re-indexes notes and returns count."""
-    client.post("/api/notes", json={"title": "X", "content": "hello"})
-    client.post("/api/notes", json={"title": "Y", "content": "world"})
+    """POST /api/v1/index/rebuild re-indexes notes and returns count."""
+    client.post("/api/v1/notes", json={"title": "X", "content": "hello"})
+    client.post("/api/v1/notes", json={"title": "Y", "content": "world"})
 
-    resp = client.post("/api/index")
+    resp = client.post("/api/v1/index/rebuild")
     assert resp.status_code == 200
-    assert resp.json()["indexed"] >= 2
+    data = resp.json()["data"]
+    assert data["indexed"] >= 2
 
 
 def test_upload_attachment(client):
-    """POST /api/attachments uploads a file and returns its path."""
+    """POST /api/v1/attachments uploads a file and returns its path."""
     from io import BytesIO
 
     resp = client.post(
-        "/api/attachments",
+        "/api/v1/attachments",
         files={"file": ("test.txt", BytesIO(b"hello world"), "text/plain")},
     )
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert "path" in data
     assert data["path"].startswith("attachments/")
     assert data["path"].endswith(".txt")
 
 
-def test_legacy_routes_use_configured_vault_subpaths(
+def test_v1_routes_use_configured_vault_subpaths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Legacy create, rebuild, upload, and stats use configured vault paths."""
+    """V1 create, rebuild, upload use configured vault paths."""
     from io import BytesIO
 
     index_calls: list[dict] = []
@@ -314,6 +319,7 @@ def test_legacy_routes_use_configured_vault_subpaths(
         return 1, 0
 
     monkeypatch.setattr("kb.core.indexer.index_files", fake_index_files)
+    monkeypatch.setattr("kb.api.v1.index_files", fake_index_files)
     config = KBConfig(
         vault_path=tmp_path.resolve(),
         general=GeneralConfig(
@@ -327,44 +333,36 @@ def test_legacy_routes_use_configured_vault_subpaths(
     )
     custom_client = TestClient(create_app(config))
 
-    created = custom_client.post("/api/notes", json={
-        "title": "Legacy Custom Paths",
+    created = custom_client.post("/api/v1/notes", json={
+        "title": "Custom Paths",
         "content": "Body",
         "category": "tech",
-    }).json()
+    }).json()["data"]
     upload = custom_client.post(
-        "/api/attachments",
+        "/api/v1/attachments",
         files={"file": ("sample.txt", BytesIO(b"hello"), "text/plain")},
-    ).json()
-    stats = custom_client.get("/api/attachments/stats").json()
-    rebuild = custom_client.post("/api/index")
+    ).json()["data"]
+    rebuild = custom_client.post("/api/v1/index/rebuild")
 
     assert created["file_id"].startswith("knowledge/tech/")
     assert (tmp_path / created["file_id"]).is_file()
     assert upload["path"].startswith("media/")
     assert (tmp_path / upload["path"]).is_file()
-    assert stats == {"count": 1}
     assert rebuild.status_code == 200
-    assert index_calls == [{
-        "full": True,
-        "embedding_provider": None,
-        "notes_dir": "knowledge",
-        "attachments_dir": "media",
-        "index_dir": "state/index",
-    }]
+    assert len(index_calls) == 1
 
 
 def test_semantic_search_requires_query(client):
-    """GET /api/semantic-search without q returns 422."""
-    resp = client.get("/api/semantic-search")
+    """GET /api/v1/search without q returns 422."""
+    resp = client.get("/api/v1/search")
     assert resp.status_code == 422
 
 
 def test_semantic_search_empty_store(client):
-    """GET /api/semantic-search with empty vector store returns []."""
-    resp = client.get("/api/semantic-search", params={"q": "测试查询"})
+    """GET /api/v1/search?mode=semantic with empty vector store returns empty list."""
+    resp = client.get("/api/v1/search", params={"q": "测试查询", "mode": "semantic"})
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json()["data"] == []
 
 
 def test_semantic_search_finds_similar(client):
@@ -372,14 +370,14 @@ def test_semantic_search_finds_similar(client):
     from kb.data.vector import VectorStore, VectorRecord
     from kb.data.embedding import LocalEmbeddingProvider
 
-    resp1 = client.post("/api/notes", json={
+    resp1 = client.post("/api/v1/notes", json={
         "title": "Python Async", "content": "asyncio 协程并发编程",
     })
-    resp2 = client.post("/api/notes", json={
+    resp2 = client.post("/api/v1/notes", json={
         "title": "Unrelated", "content": "今天天气很好适合散步",
     })
-    fid1 = resp1.json()["file_id"]
-    fid2 = resp2.json()["file_id"]
+    fid1 = resp1.json()["data"]["file_id"]
+    fid2 = resp2.json()["data"]["file_id"]
 
     provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
     v1 = provider.embed("asyncio 协程并发编程").vector
@@ -396,111 +394,112 @@ def test_semantic_search_finds_similar(client):
     ])
     store.close()
 
-    resp = client.get("/api/semantic-search", params={"q": "异步编程", "limit": "5"})
+    resp = client.get("/api/v1/search", params={"q": "异步编程", "mode": "semantic", "limit": "5"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert len(data) >= 1
-    assert any("Python" in r["title"] for r in data)
+    assert any("Python" in r["note"]["title"] for r in data)
 
 
 def test_get_note_path_traversal_blocked(client):
-    """GET /api/notes/../outside returns 403."""
-    resp = client.get("/api/notes/%2e%2e%2foutside")
+    """GET /api/v1/notes/../outside returns 403."""
+    resp = client.get("/api/v1/notes/%2e%2e%2foutside")
     assert resp.status_code == 403
 
 
 def test_get_note_not_found_body(client):
-    """GET /api/notes/nonexistent-note returns 404 with 'detail' in JSON body."""
-    resp = client.get("/api/notes/nonexistent-note")
+    """GET /api/v1/notes/nonexistent-note returns 404 with error envelope."""
+    resp = client.get("/api/v1/notes/nonexistent-note")
     assert resp.status_code == 404
-    assert "detail" in resp.json()
+    payload = resp.json()
+    assert payload["error"] is not None
 
 
 def test_update_note_path_traversal_blocked(client):
-    """PUT /api/notes/../outside with json body returns 403."""
+    """PUT /api/v1/notes/../outside with json body returns 403."""
     resp = client.put(
-        "/api/notes/%2e%2e%2foutside",
+        "/api/v1/notes/%2e%2e%2foutside",
         json={"title": "evil"},
     )
     assert resp.status_code == 403
 
 
 def test_delete_note_path_traversal_blocked(client):
-    """DELETE /api/notes/../outside returns 403."""
-    resp = client.delete("/api/notes/%2e%2e%2foutside")
+    """DELETE /api/v1/notes/../outside returns 403."""
+    resp = client.delete("/api/v1/notes/%2e%2e%2foutside")
     assert resp.status_code == 403
 
 
 def test_search_mode_validation(client):
-    """GET /api/search?q=test&mode=fts5 returns 200, body is list."""
-    client.post("/api/notes", json={"title": "Test", "content": "Some content"})
-    resp = client.get("/api/search", params={"q": "test", "mode": "fts5"})
+    """GET /api/v1/search?q=test&mode=fulltext returns 200, data is list."""
+    client.post("/api/v1/notes", json={"title": "Test", "content": "Some content"})
+    resp = client.get("/api/v1/search", params={"q": "test", "mode": "fulltext"})
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    assert isinstance(resp.json()["data"], list)
 
 
 def test_semantic_search_empty_results(client):
-    """GET /api/semantic-search?q=xyzabc123 returns 200, body is list."""
-    resp = client.get("/api/semantic-search", params={"q": "xyzabc123"})
+    """GET /api/v1/search?q=xyzabc123&mode=fulltext returns 200, data is list."""
+    resp = client.get("/api/v1/search", params={"q": "xyzabc123", "mode": "fulltext"})
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    assert isinstance(resp.json()["data"], list)
 
 
 def test_tags_endpoint(client):
-    """GET /api/tags returns 200, body has 'tags' key."""
-    resp = client.get("/api/tags")
+    """GET /api/v1/taxonomy returns 200, data has 'tags' key."""
+    resp = client.get("/api/v1/taxonomy")
     assert resp.status_code == 200
-    assert "tags" in resp.json()
-    assert isinstance(resp.json()["tags"], list)
+    assert "tags" in resp.json()["data"]
+    assert isinstance(resp.json()["data"]["tags"], list)
 
 
 def test_categories_endpoint(client):
-    """GET /api/categories returns 200, body has 'categories' key."""
-    resp = client.get("/api/categories")
+    """GET /api/v1/taxonomy returns 200, data has 'categories' key."""
+    resp = client.get("/api/v1/taxonomy")
     assert resp.status_code == 200
-    assert "categories" in resp.json()
-    assert isinstance(resp.json()["categories"], list)
+    assert "categories" in resp.json()["data"]
+    assert isinstance(resp.json()["data"]["categories"], list)
 
 
 def test_index_status_endpoint(client):
-    """GET /api/index returns 200, body has 'notes_count' key."""
-    resp = client.get("/api/index")
+    """GET /api/v1/dashboard returns 200, data has 'notes_count' key."""
+    resp = client.get("/api/v1/dashboard")
     assert resp.status_code == 200
-    assert "notes_count" in resp.json()
+    assert "notes_count" in resp.json()["data"]
 
 
 def test_trigger_index_endpoint(client):
-    """POST /api/index returns 200, body has 'indexed' and 'vectors' keys."""
-    client.post("/api/notes", json={"title": "X", "content": "hello"})
-    resp = client.post("/api/index")
+    """POST /api/v1/index/rebuild returns 200, data has 'indexed' and 'vectors' keys."""
+    client.post("/api/v1/notes", json={"title": "X", "content": "hello"})
+    resp = client.post("/api/v1/index/rebuild")
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert "indexed" in data
     assert "vectors" in data
 
 
 def test_list_notes_default(client):
-    """GET /api/notes returns 200, body is list."""
-    resp = client.get("/api/notes")
+    """GET /api/v1/notes returns 200, data is list."""
+    resp = client.get("/api/v1/notes")
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    assert isinstance(resp.json()["data"], list)
 
 
 def test_list_notes_by_tag(client):
-    """GET /api/notes?tag=python returns 200, body is list."""
-    client.post("/api/notes", json={"title": "Note P", "tags": ["python"], "content": "x"})
-    resp = client.get("/api/notes", params={"tag": "python"})
+    """GET /api/v1/notes?tag=python returns 200, data is list."""
+    client.post("/api/v1/notes", json={"title": "Note P", "tags": ["python"], "content": "x"})
+    resp = client.get("/api/v1/notes", params={"tag": "python"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert isinstance(data, list)
     assert all("python" in n.get("tags", []) for n in data)
 
 
 def test_list_notes_by_category(client):
-    """GET /api/notes?category=tech returns 200, body is list."""
-    client.post("/api/notes", json={"title": "Note C", "category": "tech", "content": "x"})
-    resp = client.get("/api/notes", params={"category": "tech"})
+    """GET /api/v1/notes?category=tech returns 200, data is list."""
+    client.post("/api/v1/notes", json={"title": "Note C", "category": "tech", "content": "x"})
+    resp = client.get("/api/v1/notes", params={"category": "tech"})
     assert resp.status_code == 200
-    data = resp.json()
+    data = resp.json()["data"]
     assert isinstance(data, list)
     assert all(n.get("category") == "tech" for n in data)

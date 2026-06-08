@@ -182,12 +182,12 @@ def test_api_chat_ask_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyPatc
     web_app = create_app(config)
     client = TestClient(web_app)
 
-    r = client.post("/api/chat/ask", json={"query": "test", "top_k": 3})
+    r = client.post("/api/v1/chat/ask", json={"query": "test", "top_k": 3})
     assert r.status_code == 200
     data = r.json()
-    assert data["answer"] == "RAG answer"
-    assert data["model"] == "mock"
-    assert "tokens_used" in data
+    assert data["data"]["answer"] == "RAG answer"
+    assert data["data"]["model"] == "mock"
+    assert "tokens_used" in data["data"]
 
 
 def test_api_chat_stream_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyPatch):
@@ -227,7 +227,7 @@ def test_api_chat_stream_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyP
     web_app = create_app(config)
     client = TestClient(web_app)
 
-    r = client.post("/api/chat", json={"query": "test", "top_k": 3})
+    r = client.post("/api/v1/chat/stream", json={"query": "test", "top_k": 3})
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
 
@@ -235,11 +235,11 @@ def test_api_chat_stream_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyP
     assert len(lines) >= 2
     import json
     chunks = [json.loads(l[6:]) for l in lines]
-    assert chunks[0]["text"] == "Hello"
+    assert chunks[0]["data"]["text"] == "Hello"
 
 
 def test_api_chat_ask_rejects_empty_query(kb_project: Path):
-    """POST /api/chat/ask with empty query returns 422."""
+    """POST /api/v1/chat/ask with empty query returns 422."""
     from kb.cli import app
     from kb.server import create_app
     from kb.core.config import load_config
@@ -250,7 +250,7 @@ def test_api_chat_ask_rejects_empty_query(kb_project: Path):
     web_app = create_app(config)
     client = TestClient(web_app)
 
-    r = client.post("/api/chat/ask", json={"query": ""})
+    r = client.post("/api/v1/chat/ask", json={"query": ""})
     assert r.status_code == 422
 
 
@@ -259,7 +259,7 @@ def test_api_chat_requires_llm_config(kb_project: Path):
     from kb.cli import app
     from kb.core.config import load_config
     from kb.core.context import AppContext
-    from kb.routes import create_api_router
+    from kb.api.v1 import create_v1_router
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -267,13 +267,13 @@ def test_api_chat_requires_llm_config(kb_project: Path):
     config = load_config(kb_project)
 
     ctx = AppContext.from_config(config, with_llm=False)
-    router = create_api_router(ctx)
+    router = create_v1_router(ctx)
     app_fastapi = FastAPI()
-    app_fastapi.include_router(router, prefix="/api")
+    app_fastapi.include_router(router, prefix="/api/v1")
     client = TestClient(app_fastapi)
 
     try:
-        r = client.post("/api/chat/ask", json={"query": "test"})
+        r = client.post("/api/v1/chat/ask", json={"query": "test"})
         assert r.status_code == 400
     finally:
         ctx.close()

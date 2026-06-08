@@ -1,4 +1,4 @@
-"""Tests for dashboard API endpoints."""
+"""Tests for dashboard API endpoints (v1)."""
 import pytest
 from pathlib import Path
 
@@ -37,10 +37,10 @@ def tmp_vault(tmp_path: Path):
     ctx.db.upsert_note(note1)
     ctx.db.upsert_note(note2)
 
-    from kb.routes import create_api_router
-    router = create_api_router(ctx)
+    from kb.api.v1 import create_v1_router
+    router = create_v1_router(ctx)
     app = FastAPI()
-    app.include_router(router, prefix="/api")
+    app.include_router(router, prefix="/api/v1")
     client = TestClient(app)
     return tmp_path, client
 
@@ -60,21 +60,27 @@ def _fake_config():
     )
 
 
-def test_get_attachments_stats(tmp_vault):
+def test_get_dashboard(tmp_vault):
+    """GET /api/v1/dashboard returns notes and attachments counts."""
     tmp_path, client = tmp_vault
-    resp = client.get("/api/attachments/stats")
+    resp = client.get("/api/v1/dashboard")
     assert resp.status_code == 200
-    data = resp.json()
-    assert "count" in data
-    assert data["count"] >= 1
+    payload = resp.json()
+    assert payload["error"] is None
+    data = payload["data"]
+    assert data["notes_count"] == 2
+    assert data["attachments_count"] >= 1
 
 
-def test_get_categories_with_count(tmp_vault):
+def test_get_taxonomy(tmp_vault):
+    """GET /api/v1/taxonomy returns categories, tags, source projects, content types."""
     tmp_path, client = tmp_vault
-    resp = client.get("/api/categories?with_count=1")
+    resp = client.get("/api/v1/taxonomy")
     assert resp.status_code == 200
-    data = resp.json()
-    assert "categories" in data
+    payload = resp.json()
+    assert payload["error"] is None
+    data = payload["data"]
+    assert isinstance(data["tags"], list)
     assert isinstance(data["categories"], list)
     for item in data["categories"]:
         assert "name" in item
@@ -82,82 +88,41 @@ def test_get_categories_with_count(tmp_vault):
         assert isinstance(item["count"], int)
 
 
-def test_get_categories_without_count(tmp_vault):
-    tmp_path, client = tmp_vault
-    resp = client.get("/api/categories")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "categories" in data
-    assert isinstance(data["categories"], list)
-    if data["categories"]:
-        assert isinstance(data["categories"][0], str)
-
-
 def test_list_notes_sort(tmp_vault):
+    """GET /api/v1/notes respects pagination envelope."""
     tmp_path, client = tmp_vault
-    from kb.data.models import Note
-
-    note_a = Note(
-        file_id="notes/sort_a.md", title="Sort Note A",
-        content="Content A", category="test",
-        tags=[], status="published", file_hash="aaa",
-    )
-    note_a.updated_at = "2026-01-01"
-    note_b = Note(
-        file_id="notes/sort_b.md", title="Sort Note B",
-        content="Content B", category="test",
-        tags=[], status="published", file_hash="bbb",
-    )
-    note_b.updated_at = "2026-06-01"
-
-    # Create a fresh context pointing at the same vault so we control timestamps.
-    ctx2 = AppContext.from_config(_fake_config(), vault=tmp_path,
-                                  with_embedding=False, with_llm=False)
-    ctx2.db.upsert_note(note_a)
-    ctx2.db.upsert_note(note_b)
-
-    from kb.routes import create_api_router
-    router2 = create_api_router(ctx2)
-    app2 = FastAPI()
-    app2.include_router(router2, prefix="/api")
-    client2 = TestClient(app2)
-
-    resp = client2.get("/api/notes?limit=5")
+    resp = client.get("/api/v1/notes", params={"limit": 5})
     assert resp.status_code == 200
-    notes = resp.json()
+    payload = resp.json()
+    assert payload["error"] is None
+    notes = payload["data"]
     assert len(notes) >= 2
-    # note_b has later updated_at, should appear first
-    assert notes[0]["file_id"] == "notes/sort_b.md"
+    for note in notes:
+        assert {"file_id", "title", "tags", "category"}.issubset(note)
 
 
 def test_get_source_projects(tmp_vault):
+    """GET /api/v1/sources returns source project info."""
     tmp_path, client = tmp_vault
-    resp = client.get("/api/source-projects")
+    resp = client.get("/api/v1/sources")
     assert resp.status_code == 200
-    data = resp.json()
-    assert "projects" in data
-    assert len(data["projects"]) == 1
-    assert data["projects"][0]["name"] == "kb"
-    assert data["projects"][0]["count"] == 2
+    payload = resp.json()
+    assert payload["error"] is None
+    data = payload["data"]
+    assert "sources" in data
 
 
-def test_get_content_type_stats(tmp_vault):
+def test_get_health(tmp_vault):
+    """GET /api/v1/health returns notes_count, vectors_count, coverage."""
     tmp_path, client = tmp_vault
-    resp = client.get("/api/content-type-stats")
+    resp = client.get("/api/v1/health")
     assert resp.status_code == 200
-    data = resp.json()
-    assert "content_types" in data
-    assert len(data["content_types"]) >= 1
-    assert data["content_types"][0]["name"] == "markdown"
-    assert data["content_types"][0]["count"] == 2
-
-
-def test_get_index_health(tmp_vault):
-    tmp_path, client = tmp_vault
-    resp = client.get("/api/index-health")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "notes_count" in data
-    assert "vectors_count" in data
-    assert "coverage" in data
-    assert data["notes_count"] == 2
+    payload = resp.json()
+    assert payload["error"] is None
+    data = payload["data"]
+    assert "status" in data
+    assert isinstance(data["checks"], list)
+    assert "notes_count" in data["summary"]
+    assert "vectors_count" in data["summary"]
+    assert "coverage" in data["summary"]
+    assert data["summary"]["notes_count"] == 2

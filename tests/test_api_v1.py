@@ -54,19 +54,19 @@ def test_v1_list_notes_returns_success_envelope(client: TestClient) -> None:
     assert payload["meta"] == {"limit": 50, "offset": 0, "total": 0}
 
 
-def test_api_list_notes_returns_valid_json_structure(client: TestClient) -> None:
-    """GET /api/notes returns a list of note summaries."""
-    client.post("/api/notes", json={"title": "Legacy API Note", "content": "Body"})
+def test_v1_create_and_list_notes(client: TestClient) -> None:
+    """POST + GET /api/v1/notes creates and lists notes."""
+    client.post("/api/v1/notes", json={"title": "Test Note", "content": "Body"})
 
-    response = client.get("/api/notes")
+    response = client.get("/api/v1/notes")
 
     assert response.status_code == 200
     payload = response.json()
-    assert isinstance(payload, list)
-    assert len(payload) == 1
-    note = payload[0]
+    assert_success_envelope(payload)
+    assert len(payload["data"]) == 1
+    note = payload["data"][0]
     assert {"file_id", "title", "tags", "category"}.issubset(note)
-    assert note["title"] == "Legacy API Note"
+    assert note["title"] == "Test Note"
 
 
 def test_v1_get_missing_note_returns_error_envelope(client: TestClient) -> None:
