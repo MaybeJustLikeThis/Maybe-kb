@@ -41,21 +41,31 @@ class RAGResponse:
 def format_context(
     results: list[SearchResult],
     db: Database,
-    truncate_chars: int = 800,
+    max_context_chars: int = 6000,
 ) -> str:
-    """Format search results into a context block for the LLM prompt."""
+    """Format search results into a context block for the LLM prompt.
+
+    Includes full note content up to max_context_chars total budget.
+    The last note may be truncated if the budget is exceeded.
+    """
     if not results:
         return "（知识库中未找到相关内容）"
 
     parts: list[str] = []
+    total_chars = 0
     for i, r in enumerate(results, 1):
         note = db.get_note(r.file_id)
         if note is None:
             continue
         content = note["content"] or ""
-        if len(content) > truncate_chars:
-            content = content[:truncate_chars] + "..."
-        parts.append(f"[{i}] {note['title']}\n{content}")
+        block = f"[{i}] {note['title']}\n{content}"
+        remaining = max_context_chars - total_chars
+        if remaining <= 0:
+            break
+        if len(block) > remaining:
+            block = block[:remaining] + "..."
+        parts.append(block)
+        total_chars += len(block)
 
     if not parts:
         return "（知识库中未找到相关内容）"

@@ -92,8 +92,32 @@ def test_format_context_with_results(tmp_path):
     assert "content of note A" in context
 
 
+def test_format_context_token_budget(tmp_path):
+    """format_context respects max_context_chars budget across multiple notes."""
+    from kb.data.database import Database
+
+    db = Database(tmp_path / "budget.db")
+    db.initialize()
+
+    # Two notes, each ~500 chars. Budget of 600 should fit first, truncate second.
+    db.upsert_note(Note(file_id="a.md", title="A", content="x" * 500))
+    db.upsert_note(Note(file_id="b.md", title="B", content="y" * 500))
+
+    results = [
+        SearchResult(file_id="a.md", title="A", score=0.9, source="fts5"),
+        SearchResult(file_id="b.md", title="B", score=0.8, source="fts5"),
+    ]
+    context = format_context(results, db, max_context_chars=600)
+
+    # First note fits fully, second is truncated
+    assert "[1] A" in context
+    assert "x" * 500 in context  # first note fully included
+    assert "[2] B" in context
+    assert "..." in context  # second note truncated
+
+
 def test_format_context_truncation(tmp_path):
-    """Long content gets truncated with '...' when exceeding truncate_chars."""
+    """Long content gets truncated when exceeding max_context_chars."""
     from kb.data.database import Database
 
     db = Database(tmp_path / ".kb" / "test.db")
@@ -103,10 +127,10 @@ def test_format_context_truncation(tmp_path):
     db.upsert_note(note)
 
     sr = SearchResult(file_id="notes/long.md", title="Long", score=0.5, source="fts5")
-    context = format_context([sr], db, truncate_chars=100)
+    context = format_context([sr], db, max_context_chars=200)
 
     assert "..." in context
-    assert len(context) < len(long_content) + 100
+    assert len(context) < 250  # title + truncated content + "..."
 
 
 def test_format_context_missing_note(tmp_path):
