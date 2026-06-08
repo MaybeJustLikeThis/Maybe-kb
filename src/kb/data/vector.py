@@ -59,10 +59,12 @@ class VectorStore:
             self._table.add(data)
 
     def delete_note(self, file_id: str) -> None:
+        """Delete all chunks for a note. Rejects file_id with single quotes."""
         self._connect()
         if self._table is not None:
-            safe_id = file_id.replace("'", "''")
-            self._table.delete(f"id = '{safe_id}'")
+            if "'" in file_id:
+                raise ValueError(f"file_id contains invalid character: {file_id!r}")
+            self._table.delete(f"id = '{file_id}'")
 
     def search(self, query_vector: list[float], limit: int = 20) -> list[VectorRecord]:
         self._connect()

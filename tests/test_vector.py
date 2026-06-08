@@ -60,3 +60,14 @@ def test_search_empty_store(tmp_path: Path):
     results = store.search([1.0, 0.0], limit=10)
     assert results == []
     store.close()
+
+
+def test_delete_note_rejects_quote_in_file_id(tmp_path: Path):
+    """delete_note raises ValueError when file_id contains single quote."""
+    store = VectorStore(tmp_path / "test.lance")
+    # Initialize a table so delete_note doesn't return early
+    store.upsert_chunks("seed.md", [
+        VectorRecord(id="seed.md", chunk_id=0, vector=[1.0], text="seed"),
+    ])
+    with pytest.raises(ValueError, match="invalid character"):
+        store.delete_note("notes/bad'id.md")
