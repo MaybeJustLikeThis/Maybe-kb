@@ -36,6 +36,56 @@ def create_mcp_server(config: KBConfig):
         stripped = value.strip()
         return stripped or None
 
+    def _create_note(
+        *,
+        title: str,
+        content: str,
+        source_project: str,
+        tags: str,
+        description: str,
+        source_context: str,
+        category: str,
+        include_content: bool = True,
+    ) -> dict:
+        """Shared logic for kb_add and kb_save."""
+        from kb.core.models import IngestRequest
+        from kb.core.ingest import ingest
+
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        cat = _blank_to_none(category)
+        desc = _blank_to_none(description)
+        sctx = _blank_to_none(source_context)
+        src_cfg = config.sources.get(source_project)
+        try:
+            note = ingest(
+                IngestRequest(
+                    title=title,
+                    content=content,
+                    source_project=source_project,
+                    tags=tag_list,
+                    category=cat,
+                    description=desc,
+                    source_context=sctx,
+                ),
+                vault, db,
+                source_config=src_cfg,
+                notes_dir=ctx.notes_dir,
+            )
+        except ValueError as e:
+            return {"error": str(e)}
+        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
+        result: dict = {
+            "file_id": note.file_id,
+            "title": note.title,
+            "source_project": note.source_project,
+            "tags": note.tags,
+            "indexed_vectors": indexed_vectors,
+            "index_error": index_error,
+        }
+        if include_content:
+            result["content"] = note.content
+        return result
+
     @mcp.tool()
     def kb_search(query: str, limit: int = 20) -> list[dict]:
         """Full-text search using FTS5 + jieba Chinese tokenization."""
@@ -118,41 +168,11 @@ def create_mcp_server(config: KBConfig):
         source_context: str = "",
     ) -> dict:
         """Create a new note. tags is comma-separated."""
-        from kb.core.models import IngestRequest
-        from kb.core.ingest import ingest
-
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-        cat = _blank_to_none(category)
-        desc = _blank_to_none(description)
-        sctx = _blank_to_none(source_context)
-        src_cfg = config.sources.get(source_project)
-        try:
-            note = ingest(
-                IngestRequest(
-                    title=title,
-                    content=content,
-                    source_project=source_project,
-                    tags=tag_list,
-                    category=cat,
-                    description=desc,
-                    source_context=sctx,
-                ),
-                vault, db,
-                source_config=src_cfg,
-                notes_dir=ctx.notes_dir,
-            )
-        except ValueError as e:
-            return {"error": str(e)}
-        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
-        return {
-            "file_id": note.file_id,
-            "title": note.title,
-            "content": note.content,
-            "source_project": note.source_project,
-            "tags": note.tags,
-            "indexed_vectors": indexed_vectors,
-            "index_error": index_error,
-        }
+        return _create_note(
+            title=title, content=content, source_project=source_project,
+            tags=tags, description=description, source_context=source_context,
+            category=category, include_content=True,
+        )
 
     @mcp.tool()
     def kb_save(
@@ -181,40 +201,11 @@ def create_mcp_server(config: KBConfig):
         Type-TechArticle, Type-Document. Combine with topic tags freely
         (e.g. tags: "Type-Troubleshooting, Python, memory-leak").
         """
-        from kb.core.models import IngestRequest
-        from kb.core.ingest import ingest
-
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-        cat = _blank_to_none(category)
-        desc = _blank_to_none(description)
-        sctx = _blank_to_none(source_context)
-        src_cfg = config.sources.get(source_project)
-        try:
-            note = ingest(
-                IngestRequest(
-                    title=title,
-                    content=content,
-                    source_project=source_project,
-                    tags=tag_list,
-                    category=cat,
-                    description=desc,
-                    source_context=sctx,
-                ),
-                vault, db,
-                source_config=src_cfg,
-                notes_dir=ctx.notes_dir,
-            )
-        except ValueError as e:
-            return {"error": str(e)}
-        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
-        return {
-            "file_id": note.file_id,
-            "title": note.title,
-            "source_project": note.source_project,
-            "tags": note.tags,
-            "indexed_vectors": indexed_vectors,
-            "index_error": index_error,
-        }
+        return _create_note(
+            title=title, content=content, source_project=source_project,
+            tags=tags, description=description, source_context=source_context,
+            category=category, include_content=False,
+        )
 
     @mcp.tool()
     def kb_rag_query(query: str, top_k: int = 5) -> dict:
