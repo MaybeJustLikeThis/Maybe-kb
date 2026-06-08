@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from kb.core.search import hybrid_search, SearchResult
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
-from kb.data.llm import LLMProvider
+from kb.data.llm import LLMProvider, LLMResponse
 from kb.data.vector import VectorStore
 
 RAG_SYSTEM_PROMPT = """你是个人知识库助手。请基于用户提供的笔记内容回答问题。如果笔记中没有相关信息，请如实告知。回答时引用具体的笔记标题和内容片段。保持回答简洁准确，使用中文回复。"""
@@ -117,16 +117,24 @@ def rag_query(
     top_k: int = 5,
 ) -> RAGResponse:
     """Run a full RAG query: hybrid search → format → generate."""
-    results = hybrid_search(query, db, embed_provider, store, limit=top_k)
-    context = format_context(results, db)
-    prompt = build_rag_prompt(query, context)
-    answer = llm.generate(prompt, system_prompt=RAG_SYSTEM_PROMPT)
-    return RAGResponse(
-        text=answer.text,
-        tokens_used=answer.tokens_used,
-        model=answer.model,
-        sources=build_rag_sources(results, db),
-    )
+    try:
+        results = hybrid_search(query, db, embed_provider, store, limit=top_k)
+        context = format_context(results, db)
+        prompt = build_rag_prompt(query, context)
+        answer = llm.generate(prompt, system_prompt=RAG_SYSTEM_PROMPT)
+        return RAGResponse(
+            text=answer.text,
+            tokens_used=answer.tokens_used,
+            model=answer.model,
+            sources=build_rag_sources(results, db),
+        )
+    except Exception as exc:
+        return RAGResponse(
+            text=f"抱歉，LLM 调用失败：{exc}",
+            tokens_used=0,
+            model="",
+            sources=[],
+        )
 
 
 def rag_query_stream(
@@ -138,7 +146,10 @@ def rag_query_stream(
     top_k: int = 5,
 ):
     """Run RAG query with streaming response."""
-    results = hybrid_search(query, db, embed_provider, store, limit=top_k)
-    context = format_context(results, db)
-    prompt = build_rag_prompt(query, context)
-    yield from llm.generate_stream(prompt, system_prompt=RAG_SYSTEM_PROMPT)
+    try:
+        results = hybrid_search(query, db, embed_provider, store, limit=top_k)
+        context = format_context(results, db)
+        prompt = build_rag_prompt(query, context)
+        yield from llm.generate_stream(prompt, system_prompt=RAG_SYSTEM_PROMPT)
+    except Exception as exc:
+        yield LLMResponse(text=f"[错误] {exc}", tokens_used=0, model="")

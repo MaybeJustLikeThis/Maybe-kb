@@ -173,6 +173,74 @@ def test_rag_query_stream_yields_chunks():
     assert joined == "streamed answer"
 
 
+def test_rag_query_handles_llm_failure(tmp_path):
+    """rag_query returns error RAGResponse when LLM raises."""
+    from kb.core.rag import RAGResponse, rag_query
+    from kb.data.database import Database
+    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+
+    class FailingLLM:
+        def generate(self, prompt, *, system_prompt=""):
+            raise ConnectionError("Ollama not reachable")
+        @property
+        def model_name(self):
+            return "failing"
+
+    class MockEmbedding(EmbeddingProvider):
+        def embed(self, text):
+            return EmbeddingResult(vector=[0.1] * 3, dimension=3, tokens_used=0)
+        def embed_batch(self, texts):
+            return [self.embed(t) for t in texts]
+        @property
+        def dimension(self):
+            return 3
+
+    class MockVectorStore:
+        def search(self, query_vector, limit=20):
+            return []
+
+    db = Database(tmp_path / "rag-err.db")
+    db.initialize()
+
+    response = rag_query("test", db, MockEmbedding(), MockVectorStore(), FailingLLM())
+    assert isinstance(response, RAGResponse)
+    assert "失败" in response.text
+    assert response.tokens_used == 0
+    assert response.model == ""
+    assert response.sources == []
+
+
+def test_rag_query_stream_handles_failure(tmp_path):
+    """rag_query_stream yields error chunk when LLM raises."""
+    from kb.data.database import Database
+    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+    from kb.core.rag import rag_query_stream
+
+    class FailingLLM:
+        def generate_stream(self, prompt, *, system_prompt=""):
+            raise RuntimeError("stream interrupted")
+
+    class MockEmbedding(EmbeddingProvider):
+        def embed(self, text):
+            return EmbeddingResult(vector=[0.1] * 3, dimension=3, tokens_used=0)
+        def embed_batch(self, texts):
+            return [self.embed(t) for t in texts]
+        @property
+        def dimension(self):
+            return 3
+
+    class MockVectorStore:
+        def search(self, query_vector, limit=20):
+            return []
+
+    db = Database(tmp_path / "rag-stream-err.db")
+    db.initialize()
+
+    chunks = list(rag_query_stream("test", db, MockEmbedding(), MockVectorStore(), FailingLLM()))
+    assert len(chunks) == 1
+    assert "错误" in chunks[0].text
+
+
 def test_build_rag_sources_includes_note_metadata(tmp_path):
     """RAG sources expose note identity, snippet, source, and attachments."""
     from kb.core.rag import build_rag_sources
