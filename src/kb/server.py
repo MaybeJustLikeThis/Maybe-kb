@@ -39,7 +39,7 @@ def create_app(kb_config: KBConfig) -> FastAPI:
         yield
         ctx.close()
 
-    app = FastAPI(title="kb", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="kb", version="0.2.0", lifespan=lifespan)
 
     v1_router = create_v1_router(ctx)
     app.include_router(v1_router, prefix="/api/v1")
