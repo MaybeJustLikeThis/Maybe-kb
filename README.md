@@ -4,6 +4,8 @@
 
 `kb` 是一个本地优先的个人知识库系统。以 Markdown 文件作为唯一数据源，提供全文搜索（FTS5 + jieba）、语义搜索（BGE-small-zh + LanceDB）、RAG 问答、Web 管理界面以及 MCP 工具接入，可被 Claude Code / Codex 等 Agent 直接调用。
 
+> **当前版本：v0.2.0** · [更新日志](CHANGELOG.md)
+
 ## 功能
 
 | 能力 | 说明 |
@@ -96,13 +98,23 @@ pip install -e ".[dev]"          # 开发依赖（pytest、pytest-cov）
 
 ## Web UI
 
-前端使用 Vite + Vue 3 + Tailwind 构建，提供：
+前端使用 Vite + Vue 3 + Tailwind 构建，所有 API 统一在 `/api/v1` 前缀下，返回标准 `{data, meta, error}` 响应格式。
+
+提供：
 
 - **搜索** — 全文搜索与语义搜索
 - **笔记管理** — 浏览、创建、编辑、删除笔记
 - **Dashboard** — 来源统计、内容类型分布、标签概览
 - **RAG Chat** — 基于知识库的问答对话
 - **System Health** — 一站式检查 vault、索引、embedding、LLM、向量覆盖率
+
+## 搜索与 RAG
+
+- **全文搜索**：jieba 分词 → SQLite FTS5
+- **语义搜索**：BGE-small-zh embedding → LanceDB 余弦相似度
+- **混合搜索**：FTS5 + 语义 RRF 融合（k=60）
+- **RAG 问答**：检索 → 上下文拼接（6000 字符预算）→ LLM 生成回答
+- **评估框架**：内置 `kb eval`，支持 hit rate、MRR、keyword coverage、LLM judge，可做 baseline 对比和回归检测
 
 ## 配置
 
@@ -154,12 +166,10 @@ API key 建议通过环境变量设置，不要写入仓库。
 src/kb/
 ├── cli.py                 # Typer CLI 入口
 ├── server.py              # FastAPI 服务
-├── routes.py              # Web API 路由
 ├── mcp_server.py          # MCP Server
-├── api/v1.py              # v1 REST API
+├── api/v1.py              # REST API（/api/v1）
 ├── core/
 │   ├── config.py          # 配置加载
-│   ├── models.py          # 数据模型
 │   ├── search.py          # 全文搜索
 │   ├── rag.py             # RAG 问答
 │   ├── indexer.py         # 索引构建
@@ -170,6 +180,7 @@ src/kb/
 │   ├── watcher.py         # 目录监听
 │   └── ...
 ├── data/
+│   ├── models.py          # 数据模型（Note、IngestRequest）
 │   ├── database.py        # SQLite + FTS5
 │   ├── vector.py          # LanceDB 向量存储
 │   ├── embedding.py       # Embedding 服务
