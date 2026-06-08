@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from kb.core.search import SearchResult, hybrid_search
+from kb.core.search import ChunkSearchResult, hybrid_search
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
 from kb.data.llm import LLMProvider
@@ -178,7 +178,7 @@ def filter_queries(
 
 
 def score_hit(
-    expected_source: str | list[str], results: list[SearchResult]
+    expected_source: str | list[str], results: list[ChunkSearchResult]
 ) -> bool:
     """Check whether any expected source appears in the search results.
 
@@ -199,7 +199,7 @@ def score_hit(
 
 
 def score_rank(
-    expected_source: str | list[str], results: list[SearchResult]
+    expected_source: str | list[str], results: list[ChunkSearchResult]
 ) -> int:
     """Find the 1-indexed rank of the first matching expected source.
 
@@ -609,7 +609,7 @@ class EvalEngine:
 
             # 3. Format context (reused by RAG and LLM judge)
             from kb.core.rag import format_context
-            context_text = format_context(results[: self._top_k], self._db)
+            context_text = format_context(results[: self._top_k])
 
             # 4. RAG (optional)
             answer = ""
@@ -664,14 +664,14 @@ class EvalEngine:
             details=details,
         )
 
-    def _run_search(self, query: str) -> list[SearchResult]:
+    def _run_search(self, query: str) -> list[ChunkSearchResult]:
         """Dispatch to the appropriate search method based on search_mode.
 
         Args:
             query: The search query text.
 
         Returns:
-            Ordered list of SearchResult.
+            Ordered list of ChunkSearchResult.
 
         Raises:
             ValueError: If search_mode is unrecognized.
@@ -682,8 +682,10 @@ class EvalEngine:
         if mode == "fts5":
             rows = self._db.search_fulltext(query, limit=limit)
             return [
-                SearchResult(
+                ChunkSearchResult(
                     file_id=row["id"],
+                    chunk_id=0,
+                    text=row["content"][:500] if row["content"] else "",
                     title=row["title"],
                     score=1.0 / (i + 1),
                     source="fts5",
@@ -696,13 +698,16 @@ class EvalEngine:
             records = self._vector_store.search(
                 embed_result.vector, limit=limit
             )
-            results: list[SearchResult] = []
+            results: list[ChunkSearchResult] = []
             for i, rec in enumerate(records):
                 note = self._db.get_note(rec.id)
                 title = note["title"] if note else rec.id
                 results.append(
-                    SearchResult(
+                    ChunkSearchResult(
                         file_id=rec.id,
+                        chunk_id=rec.chunk_id,
+                        text=rec.text,
+                        section_path=rec.section_path,
                         title=title,
                         score=1.0 / (i + 1),
                         source="semantic",

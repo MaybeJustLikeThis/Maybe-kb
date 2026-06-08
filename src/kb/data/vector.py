@@ -1,7 +1,7 @@
 """LanceDB-backed vector storage for note embeddings."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import lancedb
@@ -13,6 +13,8 @@ class VectorRecord:
     chunk_id: int
     vector: list[float]
     text: str
+    section_path: list[str] = field(default_factory=list)
+    content_type: str = "paragraph"
 
 
 class VectorStore:
@@ -48,8 +50,16 @@ class VectorStore:
         self.delete_note(file_id)
         if not chunks:
             return
+        import json as _json
         data = [
-            {"id": c.id, "chunk_id": c.chunk_id, "vector": c.vector, "text": c.text}
+            {
+                "id": c.id,
+                "chunk_id": c.chunk_id,
+                "vector": c.vector,
+                "text": c.text,
+                "section_path": _json.dumps(c.section_path, ensure_ascii=False),
+                "content_type": c.content_type,
+            }
             for c in chunks
         ]
         if self._table is None:
@@ -77,18 +87,61 @@ class VectorStore:
             .limit(limit)
             .to_list()
         )
-        return [
-            VectorRecord(
+        import json as _json
+        records: list[VectorRecord] = []
+        for r in results:
+            sp = r.get("section_path")
+            if isinstance(sp, str):
+                try:
+                    sp = _json.loads(sp)
+                except (ValueError, TypeError):
+                    sp = []
+            elif not isinstance(sp, list):
+                sp = []
+            records.append(VectorRecord(
                 id=r["id"],
                 chunk_id=r["chunk_id"],
                 vector=r["vector"],
                 text=r["text"],
-            )
-            for r in results
-        ]
+                section_path=sp,
+                content_type=r.get("content_type", "paragraph"),
+            ))
+        return records
 
     def count(self) -> int:
         self._connect()
         if self._table is None:
             return 0
         return self._table.count_rows()
+
+    def get_chunks_by_file_id(self, file_id: str) -> list[VectorRecord]:
+        """Return all chunks for a given file_id."""
+        self._connect()
+        if self._table is None:
+            return []
+        import json as _json
+        if "'" in file_id:
+            raise ValueError(f"file_id contains invalid character: {file_id!r}")
+        try:
+            rows = self._table.search().where(f"id = '{file_id}'").to_list()
+        except Exception:
+            return []
+        records: list[VectorRecord] = []
+        for r in rows:
+            sp = r.get("section_path")
+            if isinstance(sp, str):
+                try:
+                    sp = _json.loads(sp)
+                except (ValueError, TypeError):
+                    sp = []
+            elif not isinstance(sp, list):
+                sp = []
+            records.append(VectorRecord(
+                id=r["id"],
+                chunk_id=r["chunk_id"],
+                vector=r.get("vector", []),
+                text=r.get("text", ""),
+                section_path=sp,
+                content_type=r.get("content_type", "paragraph"),
+            ))
+        return records

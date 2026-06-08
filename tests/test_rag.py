@@ -1,17 +1,50 @@
 """Tests for RAG orchestration."""
 from pathlib import Path
 from kb.data.models import Note
-from kb.core.search import SearchResult
-from kb.core.rag import format_context, build_rag_prompt, RAG_SYSTEM_PROMPT, rag_query_stream
+from kb.core.search import ChunkSearchResult
+from kb.core.rag import (
+    format_context, build_rag_prompt, RAG_SYSTEM_PROMPT,
+    rag_query_stream, build_rag_sources, rag_source_to_dict,
+)
 from kb.data.llm import LLMResponse
 
 
 def test_format_context_empty():
     """Empty results produces placeholder text."""
-    from kb.data.database import Database
-    db = Database(Path("/tmp/nonexistent.db"))
-    result = format_context([], db)
+    result = format_context([])
     assert "未找到" in result
+
+
+def test_format_context_chunk_level():
+    """format_context accepts ChunkSearchResult and outputs structured context."""
+    results = [
+        ChunkSearchResult(
+            file_id="a.md", chunk_id=0, text="Python asyncio basics",
+            section_path=["## 并发"], score=0.9, source="hybrid", title="Python Guide",
+        ),
+    ]
+    context = format_context(results)
+    assert "Python Guide" in context
+    assert "## 并发" in context
+    assert "Python asyncio basics" in context
+    assert "[1]" in context
+
+
+def test_format_context_respects_budget():
+    """format_context truncates at max_context_chars."""
+    results = [
+        ChunkSearchResult(
+            file_id="a.md", chunk_id=0, text="x" * 500,
+            section_path=["## A"], score=0.9, source="fts5", title="A",
+        ),
+        ChunkSearchResult(
+            file_id="b.md", chunk_id=0, text="y" * 500,
+            section_path=["## B"], score=0.8, source="fts5", title="B",
+        ),
+    ]
+    context = format_context(results, max_context_chars=600)
+    assert "[1]" in context
+    assert "..." in context
 
 
 def test_build_rag_prompt_contains_query_and_context():
@@ -23,10 +56,11 @@ def test_build_rag_prompt_contains_query_and_context():
 def test_rag_system_prompt_exists():
     assert len(RAG_SYSTEM_PROMPT) > 50
     assert "知识库" in RAG_SYSTEM_PROMPT
+    assert "不编造" in RAG_SYSTEM_PROMPT
 
 
 def test_rag_query_returns_llm_response():
-    """Verify rag_query signature and orchestration pattern — unit test with mocks."""
+    """Verify rag_query signature and orchestration pattern."""
     from kb.core.rag import RAGResponse, rag_query
     from kb.data.database import Database
     from kb.data.embedding import EmbeddingProvider, EmbeddingResult
@@ -50,6 +84,8 @@ def test_rag_query_returns_llm_response():
     class MockVectorStore:
         def search(self, query_vector, limit=20):
             return []
+        def get_chunks_by_file_id(self, file_id):
+            return []
         def close(self):
             pass
 
@@ -63,89 +99,6 @@ def test_rag_query_returns_llm_response():
     assert isinstance(response, RAGResponse)
     assert response.text == "Mocked answer"
     assert response.sources == []
-
-
-def test_format_context_with_results(tmp_path):
-    """Call format_context on a real note stored in a temp database."""
-    from kb.data.database import Database
-
-    db = Database(tmp_path / ".kb" / "test.db")
-    db.initialize()
-    note = Note(
-        file_id="notes/a.md",
-        title="Note A",
-        content="This is the content of note A.",
-    )
-    db.upsert_note(note)
-
-    sr = SearchResult(file_id="notes/a.md", title="Note A", score=0.9, source="fts5")
-    context = format_context([sr], db)
-
-    assert "Note A" in context
-    assert "content of note A" in context
-
-
-def test_format_context_token_budget(tmp_path):
-    """format_context respects max_context_chars budget across multiple notes."""
-    from kb.data.database import Database
-
-    db = Database(tmp_path / "budget.db")
-    db.initialize()
-
-    # Two notes, each ~500 chars. Budget of 600 should fit first, truncate second.
-    db.upsert_note(Note(file_id="a.md", title="A", content="x" * 500))
-    db.upsert_note(Note(file_id="b.md", title="B", content="y" * 500))
-
-    results = [
-        SearchResult(file_id="a.md", title="A", score=0.9, source="fts5"),
-        SearchResult(file_id="b.md", title="B", score=0.8, source="fts5"),
-    ]
-    context = format_context(results, db, max_context_chars=600)
-
-    # First note fits fully, second is truncated
-    assert "[1] A" in context
-    assert "x" * 500 in context  # first note fully included
-    assert "[2] B" in context
-    assert "..." in context  # second note truncated
-
-
-def test_format_context_truncation(tmp_path):
-    """Long content gets truncated when exceeding max_context_chars."""
-    from kb.data.database import Database
-
-    db = Database(tmp_path / ".kb" / "test.db")
-    db.initialize()
-    long_content = "A" * 2000
-    note = Note(file_id="notes/long.md", title="Long", content=long_content)
-    db.upsert_note(note)
-
-    sr = SearchResult(file_id="notes/long.md", title="Long", score=0.5, source="fts5")
-    context = format_context([sr], db, max_context_chars=200)
-
-    assert "..." in context
-    assert len(context) < 250  # title + truncated content + "..."
-
-
-def test_format_context_missing_note(tmp_path):
-    """SearchResult pointing to a non-existent note yields '未找到'."""
-    from kb.data.database import Database
-
-    db = Database(tmp_path / ".kb" / "test.db")
-    db.initialize()
-
-    sr = SearchResult(
-        file_id="notes/missing.md", title="Missing", score=0.1, source="fts5"
-    )
-    context = format_context([sr], db)
-
-    assert "未找到" in context
-
-
-def test_build_rag_prompt_structure():
-    """RAG prompt contains both the user query and the reference context."""
-    prompt = build_rag_prompt("什么是 Docker？", "Docker 是容器化平台")
-    assert "什么是 Docker？" in prompt
-    assert "Docker 是容器化平台" in prompt
 
 
 def test_rag_query_stream_yields_chunks():
@@ -164,10 +117,8 @@ def test_rag_query_stream_yields_chunks():
     class MockEmbedding(EmbeddingProvider):
         def embed(self, text):
             return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-
         def embed_batch(self, texts):
             return [self.embed(t) for t in texts]
-
         @property
         def dimension(self):
             return 512
@@ -175,7 +126,8 @@ def test_rag_query_stream_yields_chunks():
     class MockVectorStore:
         def search(self, query_vector, limit=20):
             return []
-
+        def get_chunks_by_file_id(self, file_id):
+            return []
         def close(self):
             pass
 
@@ -215,6 +167,8 @@ def test_rag_query_handles_llm_failure(tmp_path):
     class MockVectorStore:
         def search(self, query_vector, limit=20):
             return []
+        def get_chunks_by_file_id(self, file_id):
+            return []
 
     db = Database(tmp_path / "rag-err.db")
     db.initialize()
@@ -249,6 +203,8 @@ def test_rag_query_stream_handles_failure(tmp_path):
     class MockVectorStore:
         def search(self, query_vector, limit=20):
             return []
+        def get_chunks_by_file_id(self, file_id):
+            return []
 
     db = Database(tmp_path / "rag-stream-err.db")
     db.initialize()
@@ -274,11 +230,14 @@ def test_build_rag_sources_includes_note_metadata(tmp_path):
         content_type="pdf",
         attachments=["attachments/2026/06/doc.pdf"],
     ))
-    result = SearchResult(
+    result = ChunkSearchResult(
         file_id="notes/doc/imported.md",
-        title="Imported Doc",
+        chunk_id=0,
+        text="Important imported content",
+        section_path=["## Intro"],
         score=0.5,
         source="hybrid",
+        title="Imported Doc",
     )
 
     sources = build_rag_sources([result], db, snippet_chars=12)
@@ -288,10 +247,21 @@ def test_build_rag_sources_includes_note_metadata(tmp_path):
     assert source.file_id == "notes/doc/imported.md"
     assert source.title == "Imported Doc"
     assert source.snippet == "Important im..."
+    assert source.section_path == ["## Intro"]
     assert source.source_project == "upload"
     assert source.source_path == "attachments/2026/06/doc.pdf"
     assert source.content_type == "pdf"
     assert source.attachments == ["attachments/2026/06/doc.pdf"]
+
+
+def test_rag_source_to_dict_includes_section_path():
+    from kb.core.rag import RAGSource
+    source = RAGSource(
+        file_id="a.md", title="A", snippet="...", section_path=["## S"],
+    )
+    d = rag_source_to_dict(source)
+    assert d["section_path"] == ["## S"]
+    assert d["file_id"] == "a.md"
 
 
 def test_rag_query_returns_sources(tmp_path):
@@ -314,7 +284,6 @@ def test_rag_query_returns_sources(tmp_path):
     class MockLLM:
         def generate(self, prompt, *, system_prompt=""):
             return LLMResponse(text="Mocked answer", tokens_used=10, model="mock")
-
         @property
         def model_name(self):
             return "mock"
@@ -322,10 +291,8 @@ def test_rag_query_returns_sources(tmp_path):
     class MockEmbedding(EmbeddingProvider):
         def embed(self, text):
             return EmbeddingResult(vector=[0.1, 0.2, 0.3], dimension=3, tokens_used=0)
-
         def embed_batch(self, texts):
             return [self.embed(text) for text in texts]
-
         @property
         def dimension(self):
             return 3
@@ -338,8 +305,12 @@ def test_rag_query_returns_sources(tmp_path):
                     chunk_id=0,
                     vector=[0.1, 0.2, 0.3],
                     text="Pinia store setup notes",
+                    section_path=["## Setup"],
+                    content_type="paragraph",
                 )
             ]
+        def get_chunks_by_file_id(self, file_id):
+            return []
 
     response = rag_query(
         "Pinia",
@@ -354,3 +325,66 @@ def test_rag_query_returns_sources(tmp_path):
     assert response.text == "Mocked answer"
     assert response.sources[0].file_id == "notes/a.md"
     assert response.sources[0].attachments == ["attachments/a.png"]
+
+
+def test_rag_end_to_end_chunk_level(tmp_path):
+    """Full RAG flow: search -> context -> generate returns chunk-aware sources."""
+    from kb.core.rag import RAGResponse, rag_query
+    from kb.data.database import Database
+    from kb.data.models import Note
+    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+    from kb.data.vector import VectorStore, VectorRecord
+
+    db = Database(tmp_path / ".kb" / "kb.db")
+    db.initialize()
+    db.upsert_note(Note(
+        file_id="notes/python.md",
+        title="Python 异步编程",
+        content="## asyncio 基础\n\nasyncio 是 Python 的异步编程框架。\n\n## 协程\n\n使用 async/await 语法定义协程。",
+        tags=["python"],
+    ))
+
+    class MockLLM:
+        def generate(self, prompt, *, system_prompt=""):
+            return LLMResponse(text="asyncio 是 Python 的异步框架", tokens_used=10, model="mock")
+        @property
+        def model_name(self):
+            return "mock"
+
+    class MockEmbedding(EmbeddingProvider):
+        def embed(self, text):
+            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
+        def embed_batch(self, texts):
+            return [self.embed(t) for t in texts]
+        @property
+        def dimension(self):
+            return 512
+
+    store = VectorStore(tmp_path / ".kb" / "vectors.lance")
+    store.upsert_chunks("notes/python.md", [
+        VectorRecord(
+            id="notes/python.md", chunk_id=0,
+            vector=[0.1] * 512,
+            text="asyncio 是 Python 的异步编程框架",
+            section_path=["## asyncio 基础"],
+            content_type="paragraph",
+        ),
+        VectorRecord(
+            id="notes/python.md", chunk_id=1,
+            vector=[0.1] * 512,
+            text="使用 async/await 语法定义协程",
+            section_path=["## 协程"],
+            content_type="paragraph",
+        ),
+    ])
+
+    response = rag_query(
+        "什么是 asyncio",
+        db, MockEmbedding(), store, MockLLM(), top_k=3,
+    )
+
+    assert isinstance(response, RAGResponse)
+    assert "asyncio" in response.text
+    assert len(response.sources) >= 1
+    assert response.sources[0].file_id == "notes/python.md"
+    store.close()

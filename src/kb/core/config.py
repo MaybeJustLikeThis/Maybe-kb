@@ -30,6 +30,7 @@ class LLMConfig:
 class RAGConfig:
     top_k: int = 5
     max_context_chars: int = 6000
+    reranker: str = "score"  # "none" | "score" | "cross-encoder"
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,8 @@ def load_config(base_path: Path) -> KBConfig:
         ),
         rag=RAGConfig(
             top_k=rag_data.get("top_k", 5),
+            max_context_chars=rag_data.get("max_context_chars", 6000),
+            reranker=rag_data.get("reranker", "score"),
         ),
         server=ServerConfig(
             host=server_data.get("host", "127.0.0.1"),

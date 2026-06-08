@@ -1,18 +1,103 @@
 """Tests for hybrid search with RRF."""
 import pytest
-from kb.core.search import SearchResult, hybrid_search
+from kb.core.search import ChunkSearchResult, hybrid_search
 
 
-def test_search_result_fields():
-    r = SearchResult(file_id="a.md", title="Test", score=0.95, source="hybrid")
+def test_chunk_search_result_fields():
+    from kb.core.search import ChunkSearchResult
+    r = ChunkSearchResult(file_id="a.md", chunk_id=0, text="content", title="Test", score=0.95, source="hybrid")
     assert r.file_id == "a.md"
     assert r.score == 0.95
     assert r.source == "hybrid"
+    assert r.text == "content"
 
 
 def test_rrf_score_decreases_with_rank():
     """Rank 1 gets higher RRF score than rank 10."""
     assert 1.0 / (60 + 1) > 1.0 / (60 + 10)
+
+
+def test_hybrid_search_returns_chunk_results(tmp_path):
+    """Hybrid search returns ChunkSearchResult with section_path."""
+    from kb.data.database import Database
+    from kb.data.models import Note
+    from kb.data.embedding import LocalEmbeddingProvider
+    from kb.data.vector import VectorStore, VectorRecord
+
+    db = Database(tmp_path / ".kb" / "kb.db")
+    db.initialize()
+    db.upsert_note(Note(
+        file_id="a.md",
+        title="Python Async",
+        content="asyncio 协程并发编程",
+        tags=["python"],
+        category="tech",
+    ))
+
+    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    store = VectorStore(tmp_path / ".kb" / "vectors.lance")
+    store.upsert_chunks("a.md", [
+        VectorRecord(
+            id="a.md",
+            chunk_id=0,
+            vector=provider.embed("asyncio 协程并发编程").vector,
+            text="asyncio 协程并发编程",
+            section_path=["## 并发"],
+            content_type="paragraph",
+        ),
+    ])
+
+    results = hybrid_search("python 异步", db, provider, store, limit=5)
+    assert len(results) >= 1
+    assert hasattr(results[0], "section_path")
+    assert hasattr(results[0], "text")
+    assert results[0].file_id == "a.md"
+
+    db.close()
+    store.close()
+
+
+def test_hybrid_search_chunk_level_ranking(tmp_path):
+    """Multiple chunks from same note are ranked independently."""
+    from kb.data.database import Database
+    from kb.data.models import Note
+    from kb.data.embedding import LocalEmbeddingProvider
+    from kb.data.vector import VectorStore, VectorRecord
+
+    db = Database(tmp_path / ".kb" / "kb.db")
+    db.initialize()
+    db.upsert_note(Note(
+        file_id="a.md",
+        title="Python Guide",
+        content="asyncio basics\n\nadvanced patterns",
+        tags=["python"],
+    ))
+
+    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    store = VectorStore(tmp_path / ".kb" / "vectors.lance")
+    store.upsert_chunks("a.md", [
+        VectorRecord(
+            id="a.md", chunk_id=0,
+            vector=provider.embed("asyncio basics").vector,
+            text="asyncio basics",
+            section_path=["## Basics"],
+            content_type="paragraph",
+        ),
+        VectorRecord(
+            id="a.md", chunk_id=1,
+            vector=provider.embed("advanced patterns").vector,
+            text="advanced patterns",
+            section_path=["## Advanced"],
+            content_type="paragraph",
+        ),
+    ])
+
+    results = hybrid_search("asyncio", db, provider, store, limit=10)
+    chunk_ids = [(r.file_id, r.chunk_id) for r in results]
+    assert ("a.md", 0) in chunk_ids
+
+    db.close()
+    store.close()
 
 
 def test_hybrid_search_both_sources(tmp_path):

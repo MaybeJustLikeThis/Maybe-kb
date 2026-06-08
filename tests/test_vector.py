@@ -71,3 +71,29 @@ def test_delete_note_rejects_quote_in_file_id(tmp_path: Path):
     ])
     with pytest.raises(ValueError, match="invalid character"):
         store.delete_note("notes/bad'id.md")
+
+
+def test_vector_record_has_section_path_and_content_type(tmp_path: Path):
+    """VectorRecord stores section_path and content_type metadata."""
+    store = VectorStore(tmp_path / "vectors.lance")
+    store.upsert_chunks("note.md", [
+        VectorRecord(
+            id="note.md",
+            chunk_id=0,
+            vector=[1.0, 0.0],
+            text="hello",
+            section_path=["# Title", "## Section"],
+            content_type="paragraph",
+        ),
+    ])
+    results = store.search([1.0, 0.0], limit=1)
+    assert results[0].section_path == ["# Title", "## Section"]
+    assert results[0].content_type == "paragraph"
+    store.close()
+
+
+def test_vector_record_defaults_for_backward_compat():
+    """VectorRecord defaults section_path and content_type for old data."""
+    rec = VectorRecord(id="a.md", chunk_id=0, vector=[1.0], text="hi")
+    assert rec.section_path == []
+    assert rec.content_type == "paragraph"

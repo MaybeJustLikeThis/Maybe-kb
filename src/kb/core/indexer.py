@@ -12,6 +12,7 @@ from kb.core.markdown_assets import collect_markdown_image_assets
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider
 from kb.data.storage import (
+    Chunk,
     _compute_hash as compute_file_hash,
     chunk_text,
     discover_notes,
@@ -253,18 +254,21 @@ def index_note_vectors(
             return 0
 
         content = row["content"] or ""
-        chunks = chunk_text(content)
+        chunks = chunk_text(content, file_id=file_id)
         if not chunks:
             store.delete_note(file_id)
             return 0
 
-        embed_results = provider.embed_batch(chunks)
+        texts = [c.text for c in chunks]
+        embed_results = provider.embed_batch(texts)
         records = [
             VectorRecord(
                 id=file_id,
                 chunk_id=i,
                 vector=result.vector,
-                text=chunks[i],
+                text=chunks[i].text,
+                section_path=chunks[i].section_path,
+                content_type=chunks[i].content_type,
             )
             for i, result in enumerate(embed_results)
         ]

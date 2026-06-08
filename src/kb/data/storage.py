@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -138,81 +139,194 @@ def discover_notes(vault_path: Path, notes_dir: str = "notes") -> list[Path]:
     return sorted(discovered)
 
 
-def chunk_text(text: str, max_chars: int = 1000, overlap: int = 100) -> list[str]:
-    """Split text into overlapping chunks at paragraph or sentence boundaries."""
-    if not text:
+@dataclass(frozen=True)
+class Chunk:
+    """A semantically coherent text chunk with structural metadata."""
+    text: str
+    section_path: list[str] = field(default_factory=list)
+    content_type: str = "paragraph"
+    file_id: str = ""
+
+
+def _detect_content_type(text: str) -> str:
+    """Detect the primary content type of a text block."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        return "code"
+    lines = stripped.split("\n")
+    non_empty = [l for l in lines if l.strip()]
+    if non_empty and all(l.strip().startswith(("- ", "* ", "+ ")) for l in non_empty):
+        return "list"
+    if non_empty and all(l.strip().startswith("|") for l in non_empty):
+        return "table"
+    return "paragraph"
+
+
+def _split_at_headings(text: str) -> list[tuple[list[str], str]]:
+    """Split markdown text at heading boundaries."""
+    lines = text.split("\n")
+    sections: list[tuple[list[str], str]] = []
+    current_headings: list[str] = []
+    current_body_lines: list[str] = []
+
+    for line in lines:
+        if re.match(r"^#{1,6}\s+", line.strip()):
+            if current_body_lines:
+                body = "\n".join(current_body_lines).strip()
+                if body:
+                    sections.append((list(current_headings), body))
+            level = len(line.split()[0])
+            while current_headings and len(current_headings[-1].split()[0]) >= level:
+                current_headings.pop()
+            current_headings.append(line.strip())
+            current_body_lines = []
+        else:
+            current_body_lines.append(line)
+
+    if current_body_lines:
+        body = "\n".join(current_body_lines).strip()
+        if body:
+            sections.append((list(current_headings), body))
+
+    if not sections:
+        stripped = text.strip()
+        if stripped:
+            sections.append(([], stripped))
+
+    return sections
+
+
+def chunk_text(
+    text: str,
+    max_chunk_chars: int = 1000,
+    overlap: int = 100,
+    file_id: str = "",
+    *,
+    max_chars: int | None = None,
+) -> list[Chunk]:
+    """Split markdown text into chunks using recursive strategy."""
+    if max_chars is not None:
+        max_chunk_chars = max_chars
+    if not text or not text.strip():
         return []
 
-    if len(text) <= max_chars:
-        return [text]
+    sections = _split_at_headings(text)
+    all_chunks: list[Chunk] = []
+
+    for section_path, body in sections:
+        chunks = _chunk_section(body, section_path, max_chunk_chars, overlap, file_id)
+        all_chunks.extend(chunks)
+
+    if overlap and len(all_chunks) > 1:
+        all_chunks = _apply_chunk_overlap(all_chunks, overlap)
+
+    return all_chunks
+
+
+def _chunk_section(text: str, section_path: list[str], max_chunk_chars: int, overlap: int, file_id: str) -> list[Chunk]:
+    """Chunk a single section's body text using recursive strategy."""
+    if len(text) <= max_chunk_chars:
+        return [Chunk(text=text, section_path=list(section_path), content_type=_detect_content_type(text), file_id=file_id)]
 
     paragraphs = text.split("\n\n")
-    chunks: list[str] = []
-    current: list[str] = []
+    if len(paragraphs) > 1:
+        return _chunk_paragraphs(paragraphs, section_path, max_chunk_chars, file_id)
+
+    sentences = re.split(r"(?<=[。！？!?])\s*", text)
+    if len(sentences) > 1:
+        return _chunk_sentences(sentences, section_path, max_chunk_chars, file_id)
+
+    return _hard_split(text, section_path, max_chunk_chars, file_id)
+
+
+def _chunk_paragraphs(paragraphs: list[str], section_path: list[str], max_chunk_chars: int, file_id: str) -> list[Chunk]:
+    """Group paragraphs into chunks up to max_chunk_chars."""
+    chunks: list[Chunk] = []
+    current_parts: list[str] = []
     current_len = 0
 
     for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
         para_len = len(para)
-        if current_len + para_len <= max_chars:
-            current.append(para)
+        if current_len + para_len <= max_chunk_chars:
+            current_parts.append(para)
             current_len += para_len
         else:
-            if current:
-                chunks.append("\n\n".join(current))
-            if para_len > max_chars:
-                sub_chunks = _split_long_paragraph(para, max_chars, overlap)
+            if current_parts:
+                combined = "\n\n".join(current_parts)
+                chunks.append(Chunk(text=combined, section_path=list(section_path), content_type=_detect_content_type(combined), file_id=file_id))
+            if para_len > max_chunk_chars:
+                sub_chunks = _chunk_section(para, section_path, max_chunk_chars, 0, file_id)
                 chunks.extend(sub_chunks)
-                current = []
+                current_parts = []
                 current_len = 0
             else:
-                current = [para]
+                current_parts = [para]
                 current_len = para_len
 
-    if current:
-        chunks.append("\n\n".join(current))
-
-    if overlap and len(chunks) > 1:
-        chunks = _apply_overlap(chunks, overlap)
+    if current_parts:
+        combined = "\n\n".join(current_parts)
+        chunks.append(Chunk(text=combined, section_path=list(section_path), content_type=_detect_content_type(combined), file_id=file_id))
 
     return chunks
 
 
-def _split_long_paragraph(text: str, max_chars: int, overlap: int) -> list[str]:
-    """Split a single paragraph at sentence boundaries."""
-    sentences = re.split(r"(?<=[.。！？!?])\s*", text)
-    chunks: list[str] = []
-    current: list[str] = []
+def _chunk_sentences(sentences: list[str], section_path: list[str], max_chunk_chars: int, file_id: str) -> list[Chunk]:
+    """Group sentences into chunks up to max_chunk_chars."""
+    chunks: list[Chunk] = []
+    current_parts: list[str] = []
     current_len = 0
 
     for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
         s_len = len(sentence)
-        if current_len + s_len <= max_chars:
-            current.append(sentence)
+        if current_len + s_len <= max_chunk_chars:
+            current_parts.append(sentence)
             current_len += s_len
         else:
-            if current:
-                chunks.append("".join(current))
-            if s_len > max_chars:
-                for i in range(0, s_len, max_chars - overlap):
-                    chunks.append(sentence[i:i + max_chars])
-                current = []
+            if current_parts:
+                combined = " ".join(current_parts)
+                chunks.append(Chunk(text=combined, section_path=list(section_path), content_type=_detect_content_type(combined), file_id=file_id))
+            if s_len > max_chunk_chars:
+                sub_chunks = _hard_split(sentence, section_path, max_chunk_chars, file_id)
+                chunks.extend(sub_chunks)
+                current_parts = []
                 current_len = 0
             else:
-                current = [sentence]
+                current_parts = [sentence]
                 current_len = s_len
 
-    if current:
-        chunks.append("".join(current))
+    if current_parts:
+        combined = " ".join(current_parts)
+        chunks.append(Chunk(text=combined, section_path=list(section_path), content_type=_detect_content_type(combined), file_id=file_id))
+
     return chunks
 
 
-def _apply_overlap(chunks: list[str], overlap: int) -> list[str]:
-    """Add overlap text from previous chunk to next chunk."""
+def _hard_split(text: str, section_path: list[str], max_chunk_chars: int, file_id: str) -> list[Chunk]:
+    """Hard split text at character boundaries as fallback."""
+    chunks: list[Chunk] = []
+    for i in range(0, len(text), max_chunk_chars):
+        segment = text[i:i + max_chunk_chars]
+        if segment.strip():
+            chunks.append(Chunk(text=segment, section_path=list(section_path), content_type=_detect_content_type(segment), file_id=file_id))
+    return chunks
+
+
+def _apply_chunk_overlap(chunks: list[Chunk], overlap: int) -> list[Chunk]:
     result = [chunks[0]]
     for i in range(1, len(chunks)):
-        prev = chunks[i - 1]
-        if len(prev) > overlap:
-            result.append(prev[-overlap:] + chunks[i])
-        else:
-            result.append(chunks[i])
+        prev_text = chunks[i - 1].text
+        overlap_text = prev_text[-overlap:] if len(prev_text) > overlap else prev_text
+        new_chunk = Chunk(text=overlap_text + chunks[i].text, section_path=chunks[i].section_path, content_type=chunks[i].content_type, file_id=chunks[i].file_id)
+        result.append(new_chunk)
     return result
+
+
+def chunk_text_plain(text: str, max_chars: int = 1000, overlap: int = 100) -> list[str]:
+    """Plain text chunking (backward compatible). Returns list of strings."""
+    return [c.text for c in chunk_text(text, max_chunk_chars=max_chars, overlap=overlap)]

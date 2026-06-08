@@ -11,18 +11,20 @@ from kb.core.eval import (
     compute_mrr,
     score_keywords,
 )
-from kb.core.search import SearchResult
+from kb.core.search import ChunkSearchResult
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_results(*file_ids: str) -> list[SearchResult]:
-    """Build SearchResult list from file_ids with simple defaults."""
+def _make_results(*file_ids: str) -> list[ChunkSearchResult]:
+    """Build ChunkSearchResult list from file_ids with simple defaults."""
     return [
-        SearchResult(
+        ChunkSearchResult(
             file_id=fid,
+            chunk_id=0,
+            text=f"Content for {fid}",
             title=f"Title for {fid}",
             score=1.0 / (i + 1),
             source="fts5",
