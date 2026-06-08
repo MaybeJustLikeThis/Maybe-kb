@@ -90,12 +90,14 @@ def create_mcp_server(config: KBConfig):
         ]
 
     @mcp.tool()
-    def kb_read(file_id: str) -> dict | None:
-        """Read a note's full content. Returns None if not found or blocked."""
+    def kb_read(file_id: str) -> dict:
+        """Read a note's full content. Returns error dict if not found or blocked."""
         try:
             _, note = services.resolve_note(vault, file_id)
-        except (ValueError, FileNotFoundError):
-            return None
+        except FileNotFoundError:
+            return {"error": "not_found", "file_id": file_id}
+        except ValueError:
+            return {"error": "path_traversal_blocked", "file_id": file_id}
         return {
             "file_id": note.file_id,
             "title": note.title,

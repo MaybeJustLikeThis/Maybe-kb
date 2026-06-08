@@ -117,8 +117,8 @@ def test_kb_read_returns_full_note(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     anyio.run(_run)
 
 
-def test_kb_read_blocked_path_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """kb_read returns None for path traversal attempt."""
+def test_kb_read_blocked_path_returns_error_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """kb_read returns error dict for path traversal attempt."""
     import os as _os
     import anyio
     _os.chdir(tmp_path)
@@ -133,8 +133,35 @@ def test_kb_read_blocked_path_returns_none(tmp_path: Path, monkeypatch: pytest.M
     mcp = create_mcp_server(config)
 
     async def _run():
-        content, _meta = await mcp.call_tool("kb_read", {"file_id": "../etc/passwd"})
-        assert len(content) == 0
+        result = await mcp.call_tool("kb_read", {"file_id": "../etc/passwd"})
+        content = result[0] if isinstance(result, tuple) else result
+        assert len(content) > 0
+        result_text = content[0].text if hasattr(content[0], "text") else str(content[0])
+        assert "path_traversal_blocked" in result_text
+    anyio.run(_run)
+
+
+def test_kb_read_not_found_returns_error_dict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """kb_read returns error dict for missing note."""
+    import os as _os
+    import anyio
+    _os.chdir(tmp_path)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / ".kb").mkdir()
+
+    config = KBConfig(
+        vault_path=tmp_path.resolve(),
+        embedding=EmbeddingConfig(provider="local", model="BAAI/bge-small-zh-v1.5"),
+    )
+    from kb.mcp_server import create_mcp_server
+    mcp = create_mcp_server(config)
+
+    async def _run():
+        result = await mcp.call_tool("kb_read", {"file_id": "notes/nonexistent.md"})
+        content = result[0] if isinstance(result, tuple) else result
+        assert len(content) > 0
+        result_text = content[0].text if hasattr(content[0], "text") else str(content[0])
+        assert "not_found" in result_text
     anyio.run(_run)
 
 
