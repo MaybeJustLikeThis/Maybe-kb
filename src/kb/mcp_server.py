@@ -1,6 +1,8 @@
 """MCP server exposing knowledge base tools for Claude Code integration."""
 from __future__ import annotations
 
+import asyncio
+import logging
 from pathlib import Path
 
 from kb.core.config import KBConfig
@@ -10,6 +12,34 @@ from kb.core.rag import rag_query
 from kb.core.search import hybrid_search
 from kb.core.serializers import note_row_to_dict
 from kb.core import services
+
+logger = logging.getLogger(__name__)
+
+TOOL_TIMEOUT_DEFAULT = 90   # seconds — search / read / write tools
+TOOL_TIMEOUT_RAG = 150      # seconds — RAG tool (includes LLM call)
+
+
+async def _run_with_timeout(fn, *args, timeout: int = TOOL_TIMEOUT_DEFAULT, **kwargs):
+    """Run a sync function in a thread pool with timeout.
+
+    Returns the function's return value, or an error dict on timeout / exception.
+    """
+    loop = asyncio.get_event_loop()
+
+    def _wrapper():
+        return fn(*args, **kwargs)
+
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, _wrapper),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Tool call timed out after %ds", timeout)
+        return {"error": "timeout", "detail": f"操作超时({timeout}s)，请稍后重试"}
+    except Exception as exc:
+        logger.error("Tool call failed: %s", exc, exc_info=True)
+        return {"error": "internal_error", "detail": str(exc)}
 
 
 def create_mcp_server(config: KBConfig):
@@ -87,78 +117,88 @@ def create_mcp_server(config: KBConfig):
         return result
 
     @mcp.tool()
-    def kb_search(query: str, limit: int = 20) -> list[dict]:
+    async def kb_search(query: str, limit: int = 20) -> list[dict]:
         """Full-text search using FTS5 + jieba Chinese tokenization."""
-        rows = db.search_fulltext(query, limit=limit)
-        return [note_row_to_dict(db, dict(row)) for row in rows]
+        def _sync():
+            rows = db.search_fulltext(query, limit=limit)
+            return [note_row_to_dict(db, dict(row)) for row in rows]
+        return await _run_with_timeout(_sync)
 
     @mcp.tool()
-    def kb_semantic_search(query: str, limit: int = 20) -> list[dict]:
+    async def kb_semantic_search(query: str, limit: int = 20) -> list[dict]:
         """Semantic search using BGE-small-zh embedding + LanceDB cosine similarity."""
-        provider = ctx.ensure_embedding()
-        if provider is None:
-            return [{"error": "embedding provider is not configured"}]
-        embed_result = provider.embed(query)
-        records = ctx.vector_store.search(embed_result.vector, limit=limit)
-        results = []
-        for r in records:
-            row = db.get_note(r.id)
-            if row is not None:
-                item = note_row_to_dict(db, dict(row))
-                item["chunk_text"] = r.text
-                results.append(item)
-        return results
+        def _sync():
+            provider = ctx.ensure_embedding()
+            if provider is None:
+                return [{"error": "embedding provider is not configured"}]
+            embed_result = provider.embed(query)
+            records = ctx.vector_store.search(embed_result.vector, limit=limit)
+            results = []
+            for r in records:
+                row = db.get_note(r.id)
+                if row is not None:
+                    item = note_row_to_dict(db, dict(row))
+                    item["chunk_text"] = r.text
+                    results.append(item)
+            return results
+        return await _run_with_timeout(_sync)
 
     @mcp.tool()
-    def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
+    async def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
-        provider = ctx.ensure_embedding()
-        if provider is None:
-            return [{"error": "embedding provider is not configured"}]
-        results = hybrid_search(query, db, provider, ctx.vector_store, limit)
-        return [
-            {"file_id": r.file_id, "title": r.title,
-             "score": r.score, "source": r.source}
-            for r in results
-        ]
+        def _sync():
+            provider = ctx.ensure_embedding()
+            if provider is None:
+                return [{"error": "embedding provider is not configured"}]
+            results = hybrid_search(query, db, provider, ctx.vector_store, limit)
+            return [
+                {"file_id": r.file_id, "title": r.title,
+                 "score": r.score, "source": r.source}
+                for r in results
+            ]
+        return await _run_with_timeout(_sync)
 
     @mcp.tool()
-    def kb_read(file_id: str) -> dict:
+    async def kb_read(file_id: str) -> dict:
         """Read a note's full content. Returns error dict if not found or blocked."""
-        try:
-            _, note = services.resolve_note(vault, file_id)
-        except FileNotFoundError:
-            return {"error": "not_found", "file_id": file_id}
-        except ValueError:
-            return {"error": "path_traversal_blocked", "file_id": file_id}
-        return {
-            "file_id": note.file_id,
-            "title": note.title,
-            "content": note.content,
-            "tags": note.tags,
-            "category": note.category,
-            "description": note.description,
-            "created_at": note.created_at,
-            "updated_at": note.updated_at,
-            "status": note.status,
-            "source_project": note.source_project,
-            "source_path": note.source_path,
-            "source_context": note.source_context,
-            "content_type": note.content_type,
-        }
+        def _sync():
+            try:
+                _, note = services.resolve_note(vault, file_id)
+            except FileNotFoundError:
+                return {"error": "not_found", "file_id": file_id}
+            except ValueError:
+                return {"error": "path_traversal_blocked", "file_id": file_id}
+            return {
+                "file_id": note.file_id,
+                "title": note.title,
+                "content": note.content,
+                "tags": note.tags,
+                "category": note.category,
+                "description": note.description,
+                "created_at": note.created_at,
+                "updated_at": note.updated_at,
+                "status": note.status,
+                "source_project": note.source_project,
+                "source_path": note.source_path,
+                "source_context": note.source_context,
+                "content_type": note.content_type,
+            }
+        return await _run_with_timeout(_sync)
 
     @mcp.tool()
-    def kb_list(category: str = "", tag: str = "", limit: int = 50) -> list[dict]:
+    async def kb_list(category: str = "", tag: str = "", limit: int = 50) -> list[dict]:
         """List notes with optional category/tag filter."""
-        rows = db.list_notes(
-            category=category or None,
-            tag=tag or None,
-            limit=limit,
-        )
-        return [note_row_to_dict(db, dict(row)) for row in rows]
+        def _sync():
+            rows = db.list_notes(
+                category=category or None,
+                tag=tag or None,
+                limit=limit,
+            )
+            return [note_row_to_dict(db, dict(row)) for row in rows]
+        return await _run_with_timeout(_sync)
 
     @mcp.tool()
-    def kb_add(
+    async def kb_add(
         title: str,
         content: str,
         category: str = "",
@@ -168,14 +208,15 @@ def create_mcp_server(config: KBConfig):
         source_context: str = "",
     ) -> dict:
         """Create a new note. tags is comma-separated."""
-        return _create_note(
+        return await _run_with_timeout(
+            _create_note,
             title=title, content=content, source_project=source_project,
             tags=tags, description=description, source_context=source_context,
             category=category, include_content=True,
         )
 
     @mcp.tool()
-    def kb_save(
+    async def kb_save(
         title: str,
         content: str,
         source_project: str,
@@ -201,37 +242,40 @@ def create_mcp_server(config: KBConfig):
         Type-TechArticle, Type-Document. Combine with topic tags freely
         (e.g. tags: "Type-Troubleshooting, Python, memory-leak").
         """
-        return _create_note(
+        return await _run_with_timeout(
+            _create_note,
             title=title, content=content, source_project=source_project,
             tags=tags, description=description, source_context=source_context,
             category=category, include_content=False,
         )
 
     @mcp.tool()
-    def kb_rag_query(query: str, top_k: int = 5) -> dict:
+    async def kb_rag_query(query: str, top_k: int = 5) -> dict:
         """RAG query: hybrid search + LLM answer over your knowledge base."""
         from kb.core.rag import rag_source_to_dict
 
-        provider = ctx.ensure_embedding()
-        llm = ctx.ensure_llm()
-        if provider is None or llm is None:
-            return {"error": "LLM and embedding config required"}
-        response = rag_query(
-            query,
-            db,
-            provider,
-            ctx.vector_store,
-            llm,
-            top_k=top_k,
-        )
-        return {
-            "answer": response.text,
-            "model": response.model,
-            "tokens_used": response.tokens_used,
-            "sources": [
-                rag_source_to_dict(source)
-                for source in response.sources
-            ],
-        }
+        def _sync():
+            provider = ctx.ensure_embedding()
+            llm = ctx.ensure_llm()
+            if provider is None or llm is None:
+                return {"error": "LLM and embedding config required"}
+            response = rag_query(
+                query,
+                db,
+                provider,
+                ctx.vector_store,
+                llm,
+                top_k=top_k,
+            )
+            return {
+                "answer": response.text,
+                "model": response.model,
+                "tokens_used": response.tokens_used,
+                "sources": [
+                    rag_source_to_dict(source)
+                    for source in response.sources
+                ],
+            }
+        return await _run_with_timeout(_sync, timeout=TOOL_TIMEOUT_RAG)
 
     return mcp

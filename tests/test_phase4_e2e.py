@@ -1,4 +1,5 @@
 """Phase 4 end-to-end tests: CLI ask, API chat, MCP RAG, config template."""
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -330,7 +331,7 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
         if t.name == "kb_rag_query"
     )
     try:
-        result = tool.fn(query="What is Python?", top_k=3)
+        result = asyncio.run(tool.fn(query="What is Python?", top_k=3))
         assert result["answer"] == "MCP answer"
         assert result["model"] == "mock"
         assert result["tokens_used"] == 5
