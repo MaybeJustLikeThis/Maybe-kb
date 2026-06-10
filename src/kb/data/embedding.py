@@ -33,7 +33,17 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
     def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5") -> None:
         from sentence_transformers import SentenceTransformer
-        self._model = SentenceTransformer(model_name)
+
+        # Cache-first: skip HuggingFace network check when model is already
+        # cached locally.  sentence-transformers/huggingface_hub attempts HEAD
+        # requests to huggingface.co even for fully cached models; in regions
+        # with poor HuggingFace connectivity this causes multi-minute hangs
+        # from repeated timeout+retry cycles.
+        try:
+            self._model = SentenceTransformer(model_name, local_files_only=True)
+        except Exception:
+            # Model not cached yet (fresh install) — fall back to network.
+            self._model = SentenceTransformer(model_name)
 
     def embed(self, text: str) -> EmbeddingResult:
         vector = self._model.encode(text, normalize_embeddings=True)
