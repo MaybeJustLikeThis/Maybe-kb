@@ -325,6 +325,7 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
 
     config = KBConfig(vault_path=Path("/tmp/mcp-rag-test"))
     server = create_mcp_server(config)
+    server._kb_context.embedding = FakeEmbedding()
 
     tool = next(
         t for t in server._tool_manager._tools.values()

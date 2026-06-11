@@ -7,7 +7,7 @@ from pathlib import Path
 
 from kb.core.config import KBConfig
 from kb.core.context import AppContext
-from kb.core.indexer import index_note_if_possible
+from kb.core import indexer
 from kb.core.rag import rag_query
 from kb.core.search import hybrid_search
 from kb.core.serializers import note_row_to_dict
@@ -103,7 +103,7 @@ def create_mcp_server(config: KBConfig):
             )
         except ValueError as e:
             return {"error": str(e)}
-        indexed_vectors, index_error = index_note_if_possible(ctx, note.file_id)
+        indexed_vectors, index_error = _index_note_if_embedding_ready(note.file_id)
         result: dict = {
             "file_id": note.file_id,
             "title": note.title,
@@ -115,6 +115,26 @@ def create_mcp_server(config: KBConfig):
         if include_content:
             result["content"] = note.content
         return result
+
+    def _index_note_if_embedding_ready(file_id: str) -> tuple[int, str | None]:
+        """Best-effort vector indexing without cold-starting embeddings."""
+        if ctx.embedding is None:
+            return (
+                0,
+                "embedding provider is not initialized; run kb index --full to build vectors",
+            )
+        try:
+            count = indexer.index_note_vectors(
+                ctx.vault,
+                ctx.db,
+                ctx.embedding,
+                file_id,
+                vector_store=ctx.vector_store,
+                index_dir=ctx.index_dir,
+            )
+            return count, None
+        except Exception as exc:
+            return 0, str(exc)
 
     @mcp.tool()
     async def kb_search(query: str, limit: int = 20) -> list[dict]:
@@ -128,9 +148,12 @@ def create_mcp_server(config: KBConfig):
     async def kb_semantic_search(query: str, limit: int = 20) -> list[dict]:
         """Semantic search using BGE-small-zh embedding + LanceDB cosine similarity."""
         def _sync():
-            provider = ctx.ensure_embedding()
+            provider = ctx.embedding
             if provider is None:
-                return [{"error": "embedding provider is not configured"}]
+                return [{
+                    "error": "embedding provider is not initialized",
+                    "detail": "Run kb index --full before semantic MCP search, or use kb_search.",
+                }]
             embed_result = provider.embed(query)
             records = ctx.vector_store.search(embed_result.vector, limit=limit)
             results = []
@@ -147,9 +170,16 @@ def create_mcp_server(config: KBConfig):
     async def kb_hybrid_search(query: str, limit: int = 20) -> list[dict]:
         """Hybrid search (FTS5 + semantic) with RRF fusion."""
         def _sync():
-            provider = ctx.ensure_embedding()
+            provider = ctx.embedding
             if provider is None:
-                return [{"error": "embedding provider is not configured"}]
+                rows = db.search_fulltext(query, limit=limit)
+                results = []
+                for row in rows:
+                    item = note_row_to_dict(db, dict(row))
+                    item["score"] = None
+                    item["source"] = "fulltext_fallback"
+                    results.append(item)
+                return results
             results = hybrid_search(query, db, provider, ctx.vector_store, limit)
             return [
                 {"file_id": r.file_id, "title": r.title,
@@ -255,7 +285,7 @@ def create_mcp_server(config: KBConfig):
         from kb.core.rag import rag_source_to_dict
 
         def _sync():
-            provider = ctx.ensure_embedding()
+            provider = ctx.embedding
             llm = ctx.ensure_llm()
             if provider is None or llm is None:
                 return {"error": "LLM and embedding config required"}

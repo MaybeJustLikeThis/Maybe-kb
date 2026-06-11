@@ -262,9 +262,6 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
 
     calls: list[tuple[str, str, object]] = []
 
-    def fake_ensure_embedding(self):
-        return FakeEmbedding()
-
     def fake_index_note_vectors(
         vault,
         db,
@@ -277,7 +274,6 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
         calls.append((file_id, index_dir, vector_store))
         return 1
 
-    monkeypatch.setattr("kb.core.context.AppContext.ensure_embedding", fake_ensure_embedding)
     monkeypatch.setattr("kb.core.indexer.index_note_vectors", fake_index_note_vectors)
 
     config = KBConfig(
@@ -286,6 +282,7 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
     )
     from kb.mcp_server import create_mcp_server
     mcp = create_mcp_server(config)
+    mcp._kb_context.embedding = FakeEmbedding()
 
     async def _run():
         result = await mcp.call_tool("kb_save", {
