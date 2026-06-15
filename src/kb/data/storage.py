@@ -53,6 +53,29 @@ def parse_markdown_file(file_path: Path, vault_path: Path) -> Note:
     )
 
 
+def parse_pdf_file(file_path: Path, vault_path: Path) -> Note:
+    """Parse a PDF file into a Note object.
+
+    Delegates to parsers.markitdown_converter which uses PyMuPDF as
+    primary strategy (correct CJK handling) with markitdown as fallback.
+    """
+    from kb.parsers.markitdown_converter import convert_file
+
+    file_hash = _compute_hash(file_path)
+    rel = file_path.relative_to(vault_path).as_posix()
+    title = file_path.stem
+
+    result = convert_file(file_path)
+
+    return Note(
+        file_id=rel,
+        title=title,
+        content=result.text,
+        file_hash=file_hash,
+        content_type="pdf",
+    )
+
+
 def _build_frontmatter_yaml(note: Note) -> str:
     """Build YAML frontmatter string from a Note."""
     data: dict[str, Any] = {"title": note.title}
@@ -122,7 +145,7 @@ def validate_vault_path(vault_path: Path, file_id: str) -> Path:
 
 
 def discover_notes(vault_path: Path, notes_dir: str = "notes") -> list[Path]:
-    """Find all .md files under the configured notes directory."""
+    """Find all .md and .pdf files under the configured notes directory."""
     vault_root = vault_path.resolve()
     notes_path = vault_path / notes_dir
     notes_root = notes_path.resolve()
@@ -132,10 +155,11 @@ def discover_notes(vault_path: Path, notes_dir: str = "notes") -> list[Path]:
         return []
 
     discovered: list[Path] = []
-    for path in notes_path.rglob("*.md"):
-        resolved = path.resolve()
-        if resolved.is_relative_to(vault_root) and resolved.is_relative_to(notes_root):
-            discovered.append(path)
+    for ext in ("*.md", "*.pdf"):
+        for path in notes_path.rglob(ext):
+            resolved = path.resolve()
+            if resolved.is_relative_to(vault_root) and resolved.is_relative_to(notes_root):
+                discovered.append(path)
     return sorted(discovered)
 
 

@@ -17,6 +17,7 @@ from kb.data.storage import (
     chunk_text,
     discover_notes,
     parse_markdown_file,
+    parse_pdf_file,
 )
 from kb.data.vector import VectorRecord, VectorStore
 
@@ -194,7 +195,10 @@ def index_files(
 
     for f in files:
         try:
-            note = parse_markdown_file(f, vault)
+            if f.suffix.lower() == ".pdf":
+                note = parse_pdf_file(f, vault)
+            else:
+                note = parse_markdown_file(f, vault)
         except Exception:
             logger.warning("Failed to parse %s, skipping", f, exc_info=True)
             continue

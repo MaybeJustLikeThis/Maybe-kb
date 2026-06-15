@@ -29,32 +29,72 @@ class EmbeddingProvider(ABC):
 
 
 class LocalEmbeddingProvider(EmbeddingProvider):
-    """BGE-small-zh via sentence-transformers, outputs 512-dim vectors."""
+    """BGE-small-zh via transformers (bypasses sentence-transformers import).
+
+    Uses AutoTokenizer + AutoModel directly, with manual mean pooling.
+    This avoids the sentence_transformers package __init__ which hangs
+    inside the MCP server's thread-pool executor (import deadlock in
+    sentence_transformers 5.x sub-module chain).
+    """
 
     def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5") -> None:
-        from sentence_transformers import SentenceTransformer
+        import logging
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        _log = logging.getLogger(__name__)
 
         # Cache-first: skip HuggingFace network check when model is already
-        # cached locally.  sentence-transformers/huggingface_hub attempts HEAD
-        # requests to huggingface.co even for fully cached models; in regions
-        # with poor HuggingFace connectivity this causes multi-minute hangs
-        # from repeated timeout+retry cycles.
+        # cached locally.
+        _log.info("Loading embedding model %s (local_files_only=True)...", model_name)
         try:
-            self._model = SentenceTransformer(model_name, local_files_only=True)
-        except Exception:
-            # Model not cached yet (fresh install) — fall back to network.
-            self._model = SentenceTransformer(model_name)
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                model_name, local_files_only=True
+            )
+            self._model = AutoModel.from_pretrained(
+                model_name, local_files_only=True
+            )
+            _log.info("Model loaded from cache successfully")
+        except Exception as e:
+            _log.warning("local_files_only failed (%s: %s), downloading...", type(e).__name__, e)
+            self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self._model = AutoModel.from_pretrained(model_name)
 
-    def embed(self, text: str) -> EmbeddingResult:
-        vector = self._model.encode(text, normalize_embeddings=True)
-        return EmbeddingResult(
-            vector=vector.tolist(),
-            dimension=len(vector),
-            tokens_used=len(text),
+        self._model.eval()
+        self._device = torch.device("cpu")
+        self._dimension = self._model.config.hidden_size
+
+    def _mean_pooling(self, model_output, attention_mask):
+        """Mean pooling – take attention mask into account for correct averaging."""
+        import torch
+        token_embeddings = model_output[0]  # last_hidden_state
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+            input_mask_expanded.sum(1), min=1e-9
         )
 
+    def embed(self, text: str) -> EmbeddingResult:
+        import torch
+        with torch.no_grad():
+            encoded = self._tokenizer(
+                text, padding=True, truncation=True, max_length=512, return_tensors="pt"
+            )
+            outputs = self._model(**encoded)
+            pooled = self._mean_pooling(outputs, encoded["attention_mask"])
+            # Normalize
+            vector = torch.nn.functional.normalize(pooled, p=2, dim=1)
+            vec = vector[0].tolist()
+        return EmbeddingResult(vector=vec, dimension=len(vec), tokens_used=len(text))
+
     def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        vectors = self._model.encode(texts, normalize_embeddings=True)
+        import torch
+        with torch.no_grad():
+            encoded = self._tokenizer(
+                texts, padding=True, truncation=True, max_length=512, return_tensors="pt"
+            )
+            outputs = self._model(**encoded)
+            pooled = self._mean_pooling(outputs, encoded["attention_mask"])
+            vectors = torch.nn.functional.normalize(pooled, p=2, dim=1)
         dim = vectors.shape[1]
         return [
             EmbeddingResult(
@@ -67,7 +107,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
     @property
     def dimension(self) -> int:
-        return self._model.get_embedding_dimension()
+        return self._dimension
 
 
 def create_embedding_provider(config: EmbeddingConfig) -> EmbeddingProvider:

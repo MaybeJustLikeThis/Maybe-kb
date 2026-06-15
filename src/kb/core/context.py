@@ -64,7 +64,15 @@ class AppContext:
 
         embedding = None
         if with_embedding and config.embedding:
-            embedding = create_embedding_provider(config.embedding)
+            try:
+                embedding = create_embedding_provider(config.embedding)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Embedding provider failed to initialize; "
+                    "semantic search will be unavailable",
+                    exc_info=True,
+                )
 
         llm = None
         if with_llm and config.llm:
