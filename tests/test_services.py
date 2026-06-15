@@ -9,6 +9,7 @@ from kb.core.services import (
     delete_note,
 )
 from kb.data.database import Database
+from kb.data.local_repository import LocalMarkdownRepository
 
 
 def test_create_note_writes_file_and_indexes(tmp_path: Path):
@@ -18,8 +19,9 @@ def test_create_note_writes_file_and_indexes(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    note = create_note(vault, db, "Test Note", "# Hello\n\nContent", "tech", ["python"])
+    note = create_note(repo, db, "Test Note", "# Hello\n\nContent", "tech", ["python"])
 
     assert note.title == "Test Note"
     assert note.file_id.startswith("notes/tech/")
@@ -38,14 +40,14 @@ def test_create_note_uses_custom_notes_dir(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="knowledge/notes")
 
     note = create_note(
-        vault,
+        repo,
         db,
         "Custom Root",
         "content",
         category="tech",
-        notes_dir="knowledge/notes",
     )
 
     assert note.file_id.startswith("knowledge/notes/tech/")
@@ -71,15 +73,15 @@ def test_create_note_rejects_paths_outside_configured_notes_root(
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir=notes_dir)
 
     with pytest.raises(ValueError):
         create_note(
-            vault,
+            repo,
             db,
             "Escape Attempt",
             "content",
             category=category,
-            notes_dir=notes_dir,
         )
 
     db.close()
@@ -92,9 +94,10 @@ def test_create_note_slug_collision(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    n1 = create_note(vault, db, "Same Title", "content 1")
-    n2 = create_note(vault, db, "Same Title", "content 2")
+    n1 = create_note(repo, db, "Same Title", "content 1")
+    n2 = create_note(repo, db, "Same Title", "content 2")
 
     assert n1.file_id != n2.file_id
     assert n1.file_id.startswith("notes/未分类/")
@@ -110,8 +113,9 @@ def test_create_note_no_category_goes_to_weifenlei(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    note = create_note(vault, db, "Random Thought", "content")
+    note = create_note(repo, db, "Random Thought", "content")
 
     assert note.file_id.startswith("notes/未分类/")
     assert (vault / note.file_id).is_file()
@@ -125,8 +129,9 @@ def test_create_note_path_traversal_sanitized(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    note = create_note(vault, db, "../../etc/hosts", "evil")
+    note = create_note(repo, db, "../../etc/hosts", "evil")
     # make_slug replaces / with -, so path traversal sequences can't form
     assert "/../" not in note.file_id
     db.close()
@@ -139,10 +144,12 @@ def test_resolve_note_returns_path_and_parsed_note(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    created = create_note(vault, db, "Test", "content here", tags=["x"])
+    created = create_note(repo, db, "Test", "content here", tags=["x"])
 
-    full_path, note = resolve_note(vault, created.file_id)
+    full_path, note = resolve_note(repo, created.file_id)
+    assert full_path is not None
     assert full_path.is_file()
     assert note.title == "Test"
     assert note.content.rstrip("\n") == "content here"
@@ -153,14 +160,18 @@ def test_resolve_note_not_found(tmp_path: Path):
     """resolve_note raises FileNotFoundError for missing file."""
     vault = tmp_path
     (vault / "notes").mkdir()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
     with pytest.raises(FileNotFoundError):
-        resolve_note(vault, "notes/nonexistent.md")
+        resolve_note(repo, "notes/nonexistent.md")
 
 
 def test_resolve_note_path_traversal_blocked(tmp_path: Path):
-    """resolve_note raises ValueError for path traversal."""
+    """resolve_note rejects path traversal as a security rejection — validate
+    returns None, so ValueError is raised (consistent with open-target layer
+    where traversal maps to 403)."""
+    repo = LocalMarkdownRepository(tmp_path, notes_dir="notes")
     with pytest.raises(ValueError):
-        resolve_note(tmp_path, "../etc/passwd")
+        resolve_note(repo, "../etc/passwd")
 
 
 def test_update_note_modifies_fields(tmp_path: Path):
@@ -170,10 +181,11 @@ def test_update_note_modifies_fields(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    created = create_note(vault, db, "Old Title", "Old content", "tech", ["a"])
+    created = create_note(repo, db, "Old Title", "Old content", "tech", ["a"])
 
-    updated = update_note(vault, db, created.file_id,
+    updated = update_note(repo, db, created.file_id,
                           title="New Title", content="New content")
     assert updated.title == "New Title"
     assert updated.content.rstrip("\n") == "New content"
@@ -188,9 +200,10 @@ def test_update_note_not_found(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
     with pytest.raises(FileNotFoundError):
-        update_note(vault, db, "notes/nonexistent.md", title="New")
+        update_note(repo, db, "notes/nonexistent.md", title="New")
 
 
 def test_delete_note_removes_file_and_record(tmp_path: Path):
@@ -200,9 +213,10 @@ def test_delete_note_removes_file_and_record(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    created = create_note(vault, db, "To Delete", "content")
-    delete_note(vault, db, created.file_id)
+    created = create_note(repo, db, "To Delete", "content")
+    delete_note(repo, db, created.file_id)
 
     assert not (vault / created.file_id).is_file()
     assert db.get_note(created.file_id) is None
@@ -216,9 +230,10 @@ def test_delete_note_not_found(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
     with pytest.raises(FileNotFoundError):
-        delete_note(vault, db, "notes/nonexistent.md")
+        delete_note(repo, db, "notes/nonexistent.md")
 
 
 def test_note_response_includes_new_fields(tmp_path: Path):
@@ -244,8 +259,9 @@ def test_note_row_to_dict_includes_new_fields(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    note = create_note(vault, db, "Source Test", "content", category="tech", tags=["test"])
+    note = create_note(repo, db, "Source Test", "content", category="tech", tags=["test"])
     conn = db._connect()
     conn.execute(
         "UPDATE notes SET source_project=?, source_context=? WHERE id=?",
@@ -267,9 +283,10 @@ def test_create_note_with_source(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
     note = create_note(
-        vault, db, "Source Note", "# Content",
+        repo, db, "Source Note", "# Content",
         category="tech", tags=["test"],
         source_project="kb",
         source_context="architectural discussion",
@@ -290,9 +307,10 @@ def test_update_note_can_set_source_fields(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    created = create_note(vault, db, "Test", "content")
-    updated = update_note(vault, db, created.file_id,
+    created = create_note(repo, db, "Test", "content")
+    updated = update_note(repo, db, created.file_id,
                           source_project="my-app",
                           source_context="debugging session")
 
@@ -309,13 +327,14 @@ def test_save_note_file_updates_timestamp(tmp_path: Path):
     (vault / ".kb").mkdir()
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
+    repo = LocalMarkdownRepository(vault, notes_dir="notes")
 
-    created = create_note(vault, db, "Test", "content")
+    created = create_note(repo, db, "Test", "content")
     old_updated = created.updated_at
 
     time.sleep(1.1)  # ensure timestamp ticks to next second
     created.content = "new content"
-    saved = save_note_file(vault, created)
+    saved = save_note_file(repo, created)
 
     assert saved.updated_at != old_updated
     assert saved.content.rstrip("\n") == "new content"
