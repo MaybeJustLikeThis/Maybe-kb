@@ -38,6 +38,17 @@ kb serve
 
 打开 `http://127.0.0.1:8420`，在 Overview 的 **System Health** 查看 vault、索引、embedding、LLM 等组件是否就绪。
 
+### macOS / Linux 一键启动
+
+```bash
+./scripts/start.sh                       # 后端 + 前端（含健康检查与日志）
+KB_SKIP_WATCH=1 ./scripts/start.sh       # 跳过目录监听
+```
+
+脚本会查找 Python、校验依赖、清理占用端口、后台启动前后端并做健康检查，日志在 `.kb/logs/`。可用 `KB_BACKEND_PORT` / `KB_FRONTEND_PORT` 调整端口。
+
+配置示例的 `vault_path` 在 macOS 上写作绝对路径，如 `vault_path = "/Users/you/ObsidianVault"`。
+
 ### 导入已有文件
 
 ```bash
