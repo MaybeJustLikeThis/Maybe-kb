@@ -66,6 +66,11 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class RepositoryConfig:
+    provider: str = "local"  # "local" | (future) "notion" | ...
+
+
+@dataclass(frozen=True)
 class KBConfig:
     vault_path: Path = field(default_factory=lambda: Path("."))
     search: SearchConfig = field(default_factory=SearchConfig)
@@ -76,6 +81,7 @@ class KBConfig:
     sources: dict[str, SourceConfig] = field(default_factory=dict)
     general: GeneralConfig = field(default_factory=GeneralConfig)
     obsidian: ObsidianConfig = field(default_factory=ObsidianConfig)
+    repository: RepositoryConfig = field(default_factory=RepositoryConfig)
 
     @property
     def notes_path(self) -> Path:
@@ -116,6 +122,7 @@ def load_config(base_path: Path) -> KBConfig:
 
     general = data.get("general", {})
     obsidian_data = data.get("obsidian", {})
+    repository_data = data.get("repository", {})
     search_data = data.get("search", {})
     embedding_data = data.get("embedding", {})
     llm_data = data.get("llm", {})
@@ -193,4 +200,5 @@ def load_config(base_path: Path) -> KBConfig:
             vault_path=obsidian_vault_path,
             open_uri_strategy=obsidian_data.get("open_uri_strategy", "file"),
         ),
+        repository=RepositoryConfig(provider=repository_data.get("provider", "local")),
     )

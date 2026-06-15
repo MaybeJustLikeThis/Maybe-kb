@@ -6,6 +6,7 @@ from kb.core.config import (
     KBConfig,
     LLMConfig,
     RAGConfig,
+    RepositoryConfig,
     SearchConfig,
     ServerConfig,
     SourceConfig,
@@ -153,3 +154,16 @@ def test_kbconfig_preserves_legacy_positional_constructor_order():
     assert config.rag is rag
     assert config.server is server
     assert config.sources is sources
+
+
+def test_repository_defaults_to_local(tmp_path: Path):
+    cfg = load_config(tmp_path)
+    assert cfg.repository.provider == "local"
+
+
+def test_repository_loaded_from_toml(tmp_path: Path):
+    (tmp_path / "config.toml").write_text(
+        '[repository]\nprovider = "local"\n', encoding="utf-8"
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.repository.provider == "local"
