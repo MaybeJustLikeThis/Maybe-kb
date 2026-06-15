@@ -55,7 +55,7 @@ def test_health_ready_for_empty_initialized_vault(tmp_path: Path) -> None:
     assert statuses["notes_dir"] == "ready"
     assert statuses["attachments_dir"] == "ready"
     assert statuses["index_dir"] == "ready"
-    assert statuses["obsidian"] == "ready"
+    assert statuses["open_target"] == "ready"
     assert statuses["embedding_config"] == "ready"
     assert statuses["llm_config"] == "ready"
 

@@ -20,7 +20,6 @@ from kb.core import queries, services
 from kb.core.context import AppContext
 from kb.core.health import get_system_health
 from kb.core.indexer import index_files, index_note_if_possible
-from kb.core.open_targets import build_obsidian_open_target
 from kb.core.rag import rag_query, rag_query_stream, rag_source_to_dict
 from kb.core.serializers import note_to_detail
 from kb.data.attachments import store_attachment
@@ -98,12 +97,10 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
         response_model=ApiResponse[OpenTarget],
     )
     def get_note_open_target(file_id: str):
-        if ctx.config is None or not ctx.config.obsidian.enabled:
-            return responses.provider_not_configured(
-                "Obsidian integration is disabled",
-            )
+        if ctx.open_target is None:
+            return responses.provider_not_configured("Open target not configured")
         try:
-            return responses.ok(build_obsidian_open_target(ctx.config, file_id))
+            return responses.ok(ctx.open_target.build(ctx.repo, file_id))
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
 

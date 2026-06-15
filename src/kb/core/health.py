@@ -121,19 +121,15 @@ def get_system_health(ctx: AppContext) -> dict:
     ]
 
     config = ctx.config
-    obsidian = config.obsidian if config else None
-    obsidian_path = obsidian.vault_path if obsidian and obsidian.vault_path else ctx.vault
-    obsidian_ready = bool(obsidian and obsidian.enabled and obsidian_path.is_dir())
+    open_target_ready = ctx.open_target is not None
+    obsidian_enabled = bool(config and config.obsidian.enabled)
     checks.append(_check(
-        "obsidian",
-        "Obsidian",
-        "ready" if obsidian_ready else "warning",
-        (
-            "Obsidian vault is configured"
-            if obsidian_ready
-            else "Obsidian integration is not ready"
-        ),
-        None if obsidian_ready else "Check Obsidian config",
+        "open_target",
+        "Open target" if not obsidian_enabled else "Obsidian",
+        "ready" if open_target_ready else "warning",
+        "Note open strategy is configured" if open_target_ready
+        else "Open target not configured",
+        None if open_target_ready else "Check config",
     ))
     checks.append(_check(
         "embedding_config",

@@ -168,8 +168,10 @@ def test_v1_note_open_target_missing_and_traversal_errors(client: TestClient) ->
     assert_error_envelope(traversal.json(), "PATH_TRAVERSAL_BLOCKED")
 
 
-def test_v1_note_open_target_requires_obsidian_enabled(tmp_path: Path) -> None:
-    """Open target endpoint reports disabled Obsidian integration."""
+def test_v1_note_open_target_returns_file_target_when_obsidian_disabled(
+    tmp_path: Path,
+) -> None:
+    """Open target falls back to a plain file target without Obsidian."""
     (tmp_path / "notes").mkdir()
     (tmp_path / "attachments").mkdir()
     (tmp_path / ".kb").mkdir()
@@ -186,8 +188,11 @@ def test_v1_note_open_target_requires_obsidian_enabled(tmp_path: Path) -> None:
 
     response = custom_client.get(f"/api/v1/notes/{created['file_id']}/open-target")
 
-    assert response.status_code == 400
-    assert_error_envelope(response.json(), "PROVIDER_NOT_CONFIGURED")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["file_path"].endswith(created["file_id"])
+    assert data["relative_path"] == created["file_id"]
+    assert data["obsidian_uri"] is None
 
 
 def test_v1_create_note_preserves_import_metadata(client: TestClient) -> None:
