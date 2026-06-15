@@ -5,8 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kb.core.config import KBConfig
+from kb.core.open_targets import OpenTargetStrategy, create_open_target
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider, create_embedding_provider
+from kb.data.local_repository import LocalMarkdownRepository
+from kb.data.repository import NoteRepository
 from kb.data.llm import LLMProvider, create_llm_provider
 from kb.data.vector import VectorStore
 
@@ -25,6 +28,8 @@ class AppContext:
     embedding: EmbeddingProvider | None = None
     llm: LLMProvider | None = None
     vector_store: VectorStore | None = None
+    repo: NoteRepository | None = None
+    open_target: OpenTargetStrategy | None = None
     allow_lazy_embedding: bool = True
     allow_lazy_llm: bool = True
     suggestion_engine: object | None = field(default=None, init=False)
@@ -80,6 +85,13 @@ class AppContext:
 
         vector_store = VectorStore(index_path / "vectors.lance")
 
+        repo = LocalMarkdownRepository(
+            vault,
+            notes_dir=config.general.notes_dir,
+            attachments_dir=config.general.attachments_dir,
+        )
+        open_target = create_open_target(config)
+
         return cls(
             vault=vault,
             db=db,
@@ -87,6 +99,8 @@ class AppContext:
             embedding=embedding,
             llm=llm,
             vector_store=vector_store,
+            repo=repo,
+            open_target=open_target,
             allow_lazy_embedding=(
                 with_embedding
                 if allow_lazy_embedding is None
