@@ -84,3 +84,64 @@ def test_fake_hash_and_supports_write():
     assert repo.supports_write is True
     repo.write(_make_note(file_id="notes/h.md", content="abc"))
     assert repo.hash("notes/h.md")
+
+
+from pathlib import Path
+
+from kb.data.local_repository import LocalMarkdownRepository  # 尚不存在
+
+
+def _local_repo(tmp_path: Path) -> LocalMarkdownRepository:
+    (tmp_path / "notes").mkdir()
+    return LocalMarkdownRepository(tmp_path, notes_dir="notes")
+
+
+def test_local_discover_empty_when_no_notes(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    assert repo.discover() == []
+
+
+def test_local_write_then_read_roundtrip(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    written = repo.write(Note(file_id="", title="Hello", content="# Hi\n\nbody"))
+    assert written.file_id.startswith("notes/") and written.file_id.endswith(".md")
+    assert (tmp_path / written.file_id).is_file()
+    note = repo.read(written.file_id)
+    assert note.title == "Hello"
+    assert repo.discover() == [written.file_id]
+
+
+def test_local_write_increments_on_name_collision(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    a = repo.write(Note(file_id="", title="Dup", content="x"))
+    b = repo.write(Note(file_id="", title="Dup", content="y"))
+    assert a.file_id != b.file_id
+    assert repo.discover() == sorted([a.file_id, b.file_id])
+
+
+def test_local_hash_detects_change(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    written = repo.write(Note(file_id="", title="T", content="v1"))
+    h1 = repo.hash(written.file_id)
+    repo.write(Note(file_id=written.file_id, title="T", content="v2"))
+    h2 = repo.hash(written.file_id)
+    assert h1 != h2
+
+
+def test_local_validate_rejects_traversal(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    assert repo.validate("../outside.md") is None
+
+
+def test_local_delete_removes_file(tmp_path: Path):
+    repo = _local_repo(tmp_path)
+    written = repo.write(Note(file_id="", title="Gone", content="x"))
+    repo.delete(written.file_id)
+    assert not (tmp_path / written.file_id).exists()
+    with pytest.raises(FileNotFoundError):
+        repo.delete(written.file_id)
+
+
+def test_local_satisfies_protocol(tmp_path: Path):
+    # runtime_checkable Protocol — structural check
+    assert isinstance(_local_repo(tmp_path), NoteRepository)
