@@ -61,14 +61,3 @@ def create_open_target(config: KBConfig) -> OpenTargetStrategy:
         vault_name = config.obsidian.vault_name or config.vault_path.name
         return ObsidianTarget(vault_name)
     return FileTarget()
-
-
-# --- backward-compat shim (removed in Task 10) ---
-
-def build_obsidian_open_target(config: KBConfig, file_id: str) -> dict[str, str]:
-    """Deprecated shim kept until api/v1.py switches to ctx.open_target."""
-    from kb.data.local_repository import LocalMarkdownRepository
-
-    repo = LocalMarkdownRepository(config.vault_path, config.general.notes_dir)
-    vault_name = config.obsidian.vault_name or config.vault_path.name
-    return ObsidianTarget(vault_name).build(repo, file_id)

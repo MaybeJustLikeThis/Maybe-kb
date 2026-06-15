@@ -19,7 +19,7 @@ from kb.core.config_writer import render_toml_sections, write_toml_text
 from kb.core.context import AppContext
 from kb.core.import_file import ImportFileError
 from kb.core.indexer import index_files
-from kb.data.storage import parse_markdown_file, validate_vault_path
+from kb.data.storage import parse_markdown_file
 from kb.core import services
 from kb.core.eval import EvalEngine, load_dataset, filter_queries, compare_results
 
@@ -300,24 +300,21 @@ def edit(
     file_path: str = typer.Argument(help="Note file path (relative to vault)"),
 ):
     """Open a note in the system's default editor."""
-    vault = _get_project_config().vault_path
-    try:
-        full_path = validate_vault_path(vault, file_path)
-    except ValueError:
-        console.print(f"[red]Path traversal blocked: {file_path}[/red]")
+    ctx = _get_context()
+    full = ctx.repo.validate(file_path)
+    if full is None or not full.is_file():
+        ctx.close()
+        console.print(f"[red]File not found or invalid: {file_path}[/red]")
         raise typer.Exit(1)
-
-    if not full_path.is_file():
-        console.print(f"[red]File not found: {file_path}[/red]")
-        raise typer.Exit(1)
+    ctx.close()
 
     if sys.platform == "win32":
         import os as _os
-        _os.startfile(str(full_path))
+        _os.startfile(str(full))
     elif sys.platform == "darwin":
-        subprocess.run(["open", str(full_path)], check=False)
+        subprocess.run(["open", str(full)], check=False)
     else:
-        subprocess.run(["xdg-open", str(full_path)], check=False)
+        subprocess.run(["xdg-open", str(full)], check=False)
 
 
 @app.command()
