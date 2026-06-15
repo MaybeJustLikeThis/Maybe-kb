@@ -1,0 +1,119 @@
+{
+  "version": "1",
+  "queries": [
+    {
+      "id": "q001",
+      "query": "ARIMA模型是什么",
+      "expected_source": "notes/量化金融/arima模型与向量自回归var）.md",
+      "expected_keywords": [
+        "ARIMA",
+        "自回归",
+        "移动平均"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q002",
+      "query": "ETS指数平滑模型",
+      "expected_source": "notes/量化金融/ets指数平滑状态空间模型.md",
+      "expected_keywords": [
+        "ETS",
+        "指数平滑",
+        "状态空间"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q003",
+      "query": "Agent工程化 ReAct Harness",
+      "expected_source": "notes/AI/Agent工程化一：基于ReAct的Harness.md",
+      "expected_keywords": [
+        "ReAct",
+        "Harness",
+        "Agent"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q004",
+      "query": "MCP Server搭建",
+      "expected_source": "notes/AI/mcp-server-搭建全记录.md",
+      "expected_keywords": [
+        "MCP",
+        "Server",
+        "搭建"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q005",
+      "query": "LanceDB为什么选它作为向量存储",
+      "expected_source": "notes/未分类/选-lancedb-作为向量存储的技术理由.md",
+      "expected_keywords": [
+        "LanceDB",
+        "向量",
+        "存储"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q006",
+      "query": "TypeScript类型体操实战",
+      "expected_source": "notes/技术/typescript-类型体操实战.md",
+      "expected_keywords": [
+        "TypeScript",
+        "类型",
+        "体操"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q007",
+      "query": "Rust所有权和借用",
+      "expected_source": "notes/未分类/rust-所有权借用计数.md",
+      "expected_keywords": [
+        "Rust",
+        "所有权",
+        "借用"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q008",
+      "query": "Python内存泄漏排查",
+      "expected_source": "notes/未分类/python-内存泄漏排查celery-worker-oom-案例.md",
+      "expected_keywords": [
+        "Python",
+        "内存泄漏",
+        "OOM"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q009",
+      "query": "React学习笔记",
+      "expected_source": [
+        "notes/前端/react学习笔记(上).md",
+        "notes/前端/react学习笔记(下).md",
+        "notes/前端/react学习笔记.md"
+      ],
+      "expected_keywords": [
+        "React",
+        "学习"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q010",
+      "query": "时间序列分解X11和STL",
+      "expected_source": "notes/量化金融/时间序列分解：x11和stl.md",
+      "expected_keywords": [
+        "X11",
+        "STL",
+        "时间序列",
+        "分解"
+      ],
+      "difficulty": "easy"
+    }
+  ]
+}
