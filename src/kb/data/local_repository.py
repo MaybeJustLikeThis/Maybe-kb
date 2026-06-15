@@ -34,7 +34,10 @@ class LocalMarkdownRepository:
         notes_dir: str = "notes",
         attachments_dir: str = "attachments",
     ) -> None:
-        self._vault = vault_path
+        # Resolve once so discover/read/write agree on an absolute root;
+        # parse_markdown_file does file_path.relative_to(vault) and a mixed
+        # absolute/relative pair raises ValueError.
+        self._vault = vault_path.resolve()
         self._notes_dir = notes_dir
         self._attachments_dir = attachments_dir
 
@@ -118,3 +121,77 @@ class LocalMarkdownRepository:
                 _log.info("Removed duplicate %s (same content as %s)", p, seen[h])
             else:
                 seen[h] = p
+
+    def sync_external_sources(
+        self,
+        external_sources: list[Path],
+        source_project: str | None,
+    ) -> None:
+        """Copy .md files from external dirs into notes_dir (local-only).
+
+        For each external .md file: resolve its category (from frontmatter,
+        falling back to the default), collect local image assets, inject
+        source_project + merged attachments into the frontmatter, and write
+        it under notes_dir/<category>/<name>. Stale copies under a different
+        category are removed first.
+        """
+        from kb.core.markdown_assets import collect_markdown_image_assets
+        from kb.data.storage import _merge_external_frontmatter, parse_markdown_file
+
+        vault_root = self._vault.resolve()
+        notes_root = (self._vault / self._notes_dir).resolve()
+        if not notes_root.is_relative_to(vault_root):
+            raise ValueError(f"notes_dir escapes vault: {self._notes_dir}")
+        notes_root.mkdir(parents=True, exist_ok=True)
+
+        cat_default = "未分类"
+        for src_dir in external_sources:
+            if not src_dir.is_dir():
+                continue
+            for f in sorted(src_dir.rglob("*.md")):
+                try:
+                    note = parse_markdown_file(f, src_dir)
+                    cat = note.category or cat_default
+                except Exception:
+                    cat = cat_default
+                cat = cat.replace("/", "-").replace("\\", "-")
+                if cat in {".", ".."}:
+                    cat = cat_default
+                category_dir = notes_root / cat
+                resolved_category_dir = category_dir.resolve()
+                if not _is_within(resolved_category_dir, notes_root, vault_root):
+                    raise ValueError(f"External source category escapes notes root: {cat}")
+                category_dir.mkdir(exist_ok=True)
+                dest = category_dir / f.name
+                resolved_dest = dest.resolve()
+                if not _is_within(resolved_dest, notes_root, vault_root):
+                    raise ValueError(f"External source destination escapes notes root: {dest}")
+                # Remove stale copies of this file that ended up in a different category.
+                for existing in notes_root.rglob(f.name):
+                    resolved_existing = existing.resolve()
+                    if not _is_within(resolved_existing, notes_root, vault_root):
+                        continue
+                    if resolved_existing != resolved_dest:
+                        existing.unlink()
+                src_content = f.read_text(encoding="utf-8")
+                collected = collect_markdown_image_assets(
+                    src_content,
+                    source_file=f,
+                    source_root=src_dir,
+                    vault=self._vault,
+                    attachments_dir=self._attachments_dir,
+                )
+                for warning in collected.warnings:
+                    _log.warning("Image asset warning for %s: %s", f, warning)
+                src_content = _merge_external_frontmatter(
+                    collected.content,
+                    source_project=source_project,
+                    attachments=collected.attachments,
+                )
+                if not dest.exists() or dest.read_text(encoding="utf-8") != src_content:
+                    dest.write_text(src_content, encoding="utf-8")
+
+
+def _is_within(path: Path, *roots: Path) -> bool:
+    """True if path is inside every given root."""
+    return all(path.is_relative_to(root) for root in roots)

@@ -7,11 +7,21 @@ import pytest
 
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+from kb.data.local_repository import LocalMarkdownRepository
 from kb.data.vector import VectorRecord
 from kb.core.config import GeneralConfig, KBConfig
 from kb.core.context import AppContext
 from kb.data.models import Note
 from kb.core.indexer import index_files, index_vectors
+
+
+def _repo(vault: Path, *, notes_dir: str = "notes", attachments_dir: str = "attachments") -> LocalMarkdownRepository:
+    """Build a LocalMarkdownRepository for the default test vault layout."""
+    return LocalMarkdownRepository(
+        vault,
+        notes_dir=notes_dir,
+        attachments_dir=attachments_dir,
+    )
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):
@@ -202,7 +212,7 @@ def test_index_files_deleted_detection(db: Database, tmp_path: Path):
     db.initialize()
 
     # Full index -- should pick up the file
-    indexed, _ = index_files(vault, db, full=True)
+    indexed, _ = index_files(_repo(vault), db, full=True, vault=vault)
     assert indexed == 1
 
     row = db.get_note("notes/test.md")
@@ -213,7 +223,7 @@ def test_index_files_deleted_detection(db: Database, tmp_path: Path):
     note_file.unlink()
 
     # Incremental index -- should detect the missing file and remove from db
-    indexed, _ = index_files(vault, db, full=False)
+    indexed, _ = index_files(_repo(vault), db, full=False, vault=vault)
 
     assert db.get_note("notes/test.md") is None
 
@@ -232,11 +242,11 @@ def test_index_files_incremental_skip_unchanged(db: Database, tmp_path: Path):
     db.initialize()
 
     # Full index first -- file is picked up
-    indexed, _ = index_files(vault, db, full=True)
+    indexed, _ = index_files(_repo(vault), db, full=True, vault=vault)
     assert indexed == 1
 
     # Incremental index -- nothing changed, should skip
-    indexed, _ = index_files(vault, db, full=False)
+    indexed, _ = index_files(_repo(vault), db, full=False, vault=vault)
     assert indexed == 0
 
 
@@ -250,7 +260,12 @@ def test_index_files_indexes_only_configured_notes_dir(db: Database, tmp_path: P
     default_note.write_text("# Ignored\n", encoding="utf-8")
     db.initialize()
 
-    indexed, _ = index_files(vault, db, full=True, notes_dir="knowledge")
+    indexed, _ = index_files(
+        _repo(vault, notes_dir="knowledge"),
+        db,
+        full=True,
+        vault=vault,
+    )
 
     assert indexed == 1
     assert db.get_note("knowledge/included.md") is not None
@@ -272,7 +287,7 @@ def test_index_files_external_sources(db: Database, tmp_path: Path):
 
     db.initialize()
 
-    index_files(vault, db, full=True, external_sources=[external])
+    index_files(_repo(vault), db, full=True, external_sources=[external], vault=vault)
 
     # File should be copied to vault/notes/mycat/ext.md
     dest = vault / "notes" / "mycat" / "ext.md"
@@ -310,11 +325,12 @@ def test_index_files_external_sources_collects_relative_images(
     db.initialize()
 
     indexed, _ = index_files(
-        vault,
+        _repo(vault),
         db,
         full=True,
         external_sources=[external],
         source_project="blog",
+        vault=vault,
     )
 
     assert indexed == 1
@@ -350,12 +366,11 @@ def test_index_files_external_sources_use_configured_vault_dirs(
     db.initialize()
 
     indexed, _ = index_files(
-        vault,
+        _repo(vault, notes_dir="knowledge", attachments_dir="files"),
         db,
         full=True,
         external_sources=[external],
-        notes_dir="knowledge",
-        attachments_dir="files",
+        vault=vault,
     )
 
     assert indexed == 1
@@ -386,11 +401,11 @@ def test_index_files_external_sources_support_relative_vault_paths(
     db.initialize()
 
     indexed, _ = index_files(
-        vault,
+        _repo(vault, notes_dir="knowledge"),
         db,
         full=True,
         external_sources=[external],
-        notes_dir="knowledge",
+        vault=vault,
     )
 
     assert indexed == 1
@@ -411,11 +426,11 @@ def test_index_files_external_category_cannot_escape_vault_when_notes_dir_is_dot
     db.initialize()
 
     indexed, _ = index_files(
-        vault,
+        _repo(vault, notes_dir="."),
         db,
         full=True,
         external_sources=[external],
-        notes_dir=".",
+        vault=vault,
     )
 
     assert indexed == 1
@@ -454,11 +469,12 @@ def test_index_files_external_sources_preserves_body_leading_whitespace(
     db.initialize()
 
     index_files(
-        vault,
+        _repo(vault),
         db,
         full=True,
         external_sources=[external],
         source_project="blog",
+        vault=vault,
     )
 
     attachments = db.get_attachments("notes/docs/post.md")
@@ -503,11 +519,12 @@ def test_index_files_external_sources_dedupes_merged_attachments(
     db.initialize()
 
     index_files(
-        vault,
+        _repo(vault),
         db,
         full=True,
         external_sources=[external],
         source_project="blog",
+        vault=vault,
     )
 
     text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
@@ -534,11 +551,12 @@ def test_index_files_external_sources_handles_non_mapping_frontmatter(
     db.initialize()
 
     indexed, _ = index_files(
-        vault,
+        _repo(vault),
         db,
         full=True,
         external_sources=[external],
         source_project="blog",
+        vault=vault,
     )
 
     assert indexed == 1
@@ -582,9 +600,9 @@ def test_index_files_external_sources_reuses_existing_attachment_hash_path(
     (vault / existing_path).write_bytes(image_data)
     db.initialize()
 
-    index_files(vault, db, full=True, external_sources=[external])
+    index_files(_repo(vault), db, full=True, external_sources=[external], vault=vault)
     first_text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
-    index_files(vault, db, full=True, external_sources=[external])
+    index_files(_repo(vault), db, full=True, external_sources=[external], vault=vault)
     second_text = (vault / "notes" / "docs" / "post.md").read_text(encoding="utf-8")
 
     assert first_text == second_text
@@ -614,7 +632,7 @@ def test_index_files_external_sources_collects_hexo_asset_folder(
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
 
-    index_files(vault, db, full=True, external_sources=[external])
+    index_files(_repo(vault), db, full=True, external_sources=[external], vault=vault)
 
     dest = vault / "notes" / "blog" / "hexo-post.md"
     text = dest.read_text(encoding="utf-8")
@@ -789,7 +807,7 @@ def test_index_files_full_removes_missing(db: Database, tmp_path: Path):
     assert db.get_note("notes/ghost.md") is not None
 
     # Full index -- should discover no file for ghost.md and purge it
-    index_files(vault, db, full=True)
+    index_files(_repo(vault), db, full=True, vault=vault)
 
     assert db.get_note("notes/ghost.md") is None
 
@@ -819,11 +837,11 @@ def test_index_files_propagates_configured_index_dir(
     db.initialize()
 
     result = index_files(
-        tmp_path,
+        _repo(tmp_path, notes_dir="knowledge"),
         db,
         full=True,
         embedding_provider=FakeEmbeddingProvider(),
-        notes_dir="knowledge",
+        vault=tmp_path,
         index_dir=".index",
     )
 

@@ -52,12 +52,11 @@ def _get_context(
 
 def _index_context(ctx: AppContext, *, full: bool) -> tuple[int, int]:
     return index_files(
-        ctx.vault,
+        ctx.repo,
         ctx.db,
         full=full,
         embedding_provider=ctx.embedding,
-        notes_dir=ctx.notes_dir,
-        attachments_dir=ctx.attachments_dir,
+        vault=ctx.vault,
         index_dir=ctx.index_dir,
     )
 

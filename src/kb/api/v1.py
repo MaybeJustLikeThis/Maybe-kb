@@ -190,12 +190,11 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     def rebuild_index():
         try:
             indexed, vectors = index_files(
-                ctx.vault,
+                ctx.repo,
                 ctx.db,
                 full=True,
                 embedding_provider=ctx.ensure_embedding(),
-                notes_dir=ctx.notes_dir,
-                attachments_dir=ctx.attachments_dir,
+                vault=ctx.vault,
                 index_dir=ctx.index_dir,
             )
         except Exception:

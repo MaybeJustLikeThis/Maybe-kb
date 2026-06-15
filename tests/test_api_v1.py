@@ -363,7 +363,7 @@ def test_v1_create_note_updates_vector_index(
     def fake_create_embedding_provider(config):
         return object()
 
-    def fake_index_files(vault, db, **kwargs):
+    def fake_index_files(repo, db, **kwargs):
         return 0, 0
 
     def fake_index_note_vectors(
@@ -409,7 +409,7 @@ def test_v1_update_note_updates_vector_index(
     def fake_create_embedding_provider(config):
         return object()
 
-    def fake_index_files(vault, db, **kwargs):
+    def fake_index_files(repo, db, **kwargs):
         return 0, 0
 
     def fake_index_note_vectors(
@@ -475,7 +475,7 @@ def test_v1_uses_configured_vault_subpaths(
     def fake_create_embedding_provider(config):
         return object()
 
-    def fake_index_files(vault, db, **kwargs):
+    def fake_index_files(repo, db, **kwargs):
         rebuild_calls.append(kwargs)
         return 1, 0
 
@@ -539,8 +539,7 @@ def test_v1_uses_configured_vault_subpaths(
         if key != "embedding_provider"
     } == {
         "full": True,
-        "notes_dir": "knowledge",
-        "attachments_dir": "media",
+        "vault": config.vault_path,
         "index_dir": "state/index",
     }
     assert note_index_calls[0]["file_id"] == created["file_id"]

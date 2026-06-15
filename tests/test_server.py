@@ -314,7 +314,7 @@ def test_v1_routes_use_configured_vault_subpaths(
 
     index_calls: list[dict] = []
 
-    def fake_index_files(vault, db, **kwargs):
+    def fake_index_files(repo, db, **kwargs):
         index_calls.append(kwargs)
         return 1, 0
 

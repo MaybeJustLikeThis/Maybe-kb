@@ -13,6 +13,14 @@ from kb.data.models import Note
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+# Body-preserving variant: captures the raw frontmatter block and slices it
+# off without normalizing the body, so external-source sync can rewrite the
+# header while leaving trailing whitespace and the body byte-for-byte intact.
+_FRONTMATTER_BOUNDARY_RE = re.compile(
+    r"^---[ \t]*\r?\n(?P<raw>.*?)\r?\n---[ \t]*(?:\r?\n|$)",
+    re.DOTALL,
+)
+
 
 def _compute_hash(path: Path) -> str:
     """SHA256 of file content."""
@@ -33,6 +41,72 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 
     body = text[match.end():]
     return data, body
+
+
+def _split_frontmatter_preserving_body(markdown: str) -> tuple[dict[str, Any], str]:
+    """Split frontmatter from body, returning the body untouched.
+
+    Unlike _split_frontmatter, this uses the boundary regex and slices at
+    match.end() so the body (including any leading blank line) is preserved
+    exactly. Used by external-source sync to rewrite the header only.
+    """
+    match = _FRONTMATTER_BOUNDARY_RE.match(markdown)
+    if match is None:
+        return {}, markdown
+
+    try:
+        parsed = yaml.safe_load(match.group("raw")) or {}
+    except yaml.YAMLError:
+        parsed = {}
+
+    data = parsed if isinstance(parsed, dict) else {}
+
+    return data, markdown[match.end():]
+
+
+def _merge_external_frontmatter(
+    markdown: str,
+    *,
+    source_project: str | None,
+    attachments: list[str],
+) -> str:
+    """Inject source_project and merged attachment list into a note's frontmatter.
+
+    Rewrites only the header; the body is preserved byte-for-byte. Returns the
+    original markdown unchanged when no field would change.
+    """
+    frontmatter, body = _split_frontmatter_preserving_body(markdown)
+    data: dict[str, Any] = dict(frontmatter)
+    changed = False
+
+    if source_project and not data.get("source_project"):
+        data["source_project"] = source_project
+        changed = True
+
+    existing_value = data.get("attachments") or []
+    if isinstance(existing_value, str):
+        existing_attachments = [existing_value]
+    else:
+        existing_attachments = list(existing_value)
+    merged_attachments = []
+    for path in [*existing_attachments, *attachments]:
+        if path not in merged_attachments:
+            merged_attachments.append(path)
+    if merged_attachments != existing_attachments:
+        changed = True
+    if merged_attachments:
+        data["attachments"] = merged_attachments
+
+    if not changed:
+        return markdown
+
+    raw = yaml.dump(
+        data,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    ).strip()
+    return f"---\n{raw}\n---\n{body}"
 
 
 def parse_markdown_file(file_path: Path, vault_path: Path) -> Note:

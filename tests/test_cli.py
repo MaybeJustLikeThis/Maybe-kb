@@ -399,9 +399,8 @@ def test_kb_migrate_uses_external_vault_and_configured_notes_dir(
     assert result.exit_code == 0, result.output
     assert not note.exists()
     assert vault.joinpath("knowledge", "tech", "root.md").is_file()
-    assert calls[0][0][0] == vault.resolve()
-    assert calls[0][1]["notes_dir"] == "knowledge"
-    assert calls[0][1]["attachments_dir"] == "media"
+    assert calls[0][0][0].__class__.__name__ == "LocalMarkdownRepository"
+    assert calls[0][1]["vault"].resolve() == vault.resolve()
     assert calls[0][1]["index_dir"] == ".index"
 
 
@@ -422,9 +421,8 @@ def test_kb_index_uses_external_vault_without_importing_watch_dir(
 
     assert result.exit_code == 0, result.output
     args, kwargs = calls[0]
-    assert args[0] == vault.resolve()
-    assert kwargs["notes_dir"] == "knowledge"
-    assert kwargs["attachments_dir"] == "media"
+    assert args[0].__class__.__name__ == "LocalMarkdownRepository"
+    assert kwargs["vault"].resolve() == vault.resolve()
     assert kwargs["index_dir"] == ".index"
     assert "external_sources" not in kwargs
 
@@ -464,9 +462,8 @@ def test_kb_serve_watches_notes_and_indexes_configured_vault(
     assert watcher_calls[0][0] == notes.resolve()
     assert len(index_calls) == 2
     for args, kwargs in index_calls:
-        assert args[0] == vault.resolve()
-        assert kwargs["notes_dir"] == "knowledge"
-        assert kwargs["attachments_dir"] == "media"
+        assert args[0].__class__.__name__ == "LocalMarkdownRepository"
+        assert kwargs["vault"].resolve() == vault.resolve()
         assert kwargs["index_dir"] == ".index"
         assert "external_sources" not in kwargs
 
@@ -536,7 +533,8 @@ def test_kb_obsidian_init_vault_copies_and_updates_config(
     assert target.joinpath("notes", "topic", "note.md").is_file()
     assert target.joinpath("attachments", "image.png").read_bytes() == b"image"
     assert target.joinpath(".obsidian").is_dir()
-    assert index_calls[0][0][0] == target.resolve()
+    assert index_calls[0][0][0].__class__.__name__ == "LocalMarkdownRepository"
+    assert index_calls[0][1]["vault"].resolve() == target.resolve()
     text = kb_dir.joinpath("config.toml").read_text(encoding="utf-8")
     data = tomllib.loads(text)
     assert "# keep this comment" in text
