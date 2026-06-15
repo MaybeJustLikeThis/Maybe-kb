@@ -52,9 +52,9 @@ class NoteDetail(NoteBase):
 
 
 class OpenTarget(BaseModel):
-    obsidian_uri: str
-    file_path: str
-    relative_path: str
+    obsidian_uri: str | None = None
+    file_path: str | None = None
+    relative_path: str | None = None
 
 
 class RAGSource(BaseModel):

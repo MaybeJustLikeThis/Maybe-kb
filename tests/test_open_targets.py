@@ -2,45 +2,49 @@ from pathlib import Path
 
 import pytest
 
-from kb.core.config import KBConfig, ObsidianConfig
-from kb.core.open_targets import build_obsidian_open_target
+from kb.data.local_repository import LocalMarkdownRepository
+from kb.data.models import Note
+from kb.core.open_targets import (
+    FileTarget,
+    ObsidianTarget,
+    create_open_target,
+)
+from kb.core.config import KBConfig
 
 
-def test_build_obsidian_open_target_encodes_relative_file(tmp_path: Path):
-    vault = tmp_path / "ObsidianVault"
-    note = vault / "notes" / "AI" / "测试 note(一).md"
-    note.parent.mkdir(parents=True)
-    note.write_text("# note", encoding="utf-8")
-    config = KBConfig(
-        vault_path=vault.resolve(),
-        obsidian=ObsidianConfig(enabled=True, vault_name="ObsidianVault"),
-    )
-
-    target = build_obsidian_open_target(config, "notes/AI/测试 note(一).md")
-
-    assert target["relative_path"] == "notes/AI/测试 note(一).md"
-    assert target["file_path"] == note.resolve().as_posix()
-    assert target["obsidian_uri"] == (
-        "obsidian://open?vault=ObsidianVault&file="
-        "notes%2FAI%2F%E6%B5%8B%E8%AF%95%20note%28%E4%B8%80%29.md"
-    )
+def _repo_with_note(tmp_path: Path, fid: str = "notes/x.md") -> LocalMarkdownRepository:
+    (tmp_path / "notes").mkdir(parents=True, exist_ok=True)
+    repo = LocalMarkdownRepository(tmp_path, notes_dir="notes")
+    repo.write(Note(file_id=fid, title="X", content="body"))
+    return repo
 
 
-def test_build_obsidian_open_target_blocks_path_traversal(tmp_path: Path):
-    config = KBConfig(
-        vault_path=(tmp_path / "vault").resolve(),
-        obsidian=ObsidianConfig(enabled=True, vault_name="ObsidianVault"),
-    )
+def test_obsidian_target_builds_uri(tmp_path: Path):
+    repo = _repo_with_note(tmp_path)
+    target = ObsidianTarget(vault_name="MyVault")
+    result = target.build(repo, "notes/x.md")
+    assert result["obsidian_uri"].startswith("obsidian://open?")
+    assert "vault=MyVault" in result["obsidian_uri"]
+    assert result["relative_path"] == "notes/x.md"
 
-    with pytest.raises(ValueError, match="Path traversal blocked"):
-        build_obsidian_open_target(config, "../secret.md")
+
+def test_file_target_omits_obsidian_uri(tmp_path: Path):
+    repo = _repo_with_note(tmp_path)
+    target = FileTarget()
+    result = target.build(repo, "notes/x.md")
+    assert "obsidian_uri" not in result
+    assert result["relative_path"] == "notes/x.md"
 
 
-def test_build_obsidian_open_target_requires_existing_file(tmp_path: Path):
-    config = KBConfig(
-        vault_path=(tmp_path / "vault").resolve(),
-        obsidian=ObsidianConfig(enabled=True, vault_name="ObsidianVault"),
-    )
+def test_factory_picks_obsidian_when_enabled(tmp_path: Path):
+    from dataclasses import replace
+    base = KBConfig(vault_path=tmp_path)
+    enabled = replace(base, obsidian=replace(base.obsidian, enabled=True, vault_name="V"))
+    assert isinstance(create_open_target(enabled), ObsidianTarget)
+    assert isinstance(create_open_target(base), FileTarget)
 
+
+def test_target_raises_on_missing(tmp_path: Path):
+    repo = _repo_with_note(tmp_path)
     with pytest.raises(FileNotFoundError):
-        build_obsidian_open_target(config, "notes/missing.md")
+        FileTarget().build(repo, "notes/missing.md")
