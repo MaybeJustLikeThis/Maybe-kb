@@ -8,6 +8,7 @@ from kb.core.ingest import ingest
 from kb.data.models import IngestRequest, Note
 from kb.data.attachments import store_attachment
 from kb.data.database import Database
+from kb.data.repository import NoteRepository
 from kb.parsers.markitdown_converter import (
     ConversionError,
     MarkItDownNotInstalledError,
@@ -22,9 +23,9 @@ class ImportFileError(Exception):
 def import_file(
     source: Path,
     *,
-    vault: Path,
+    repo: NoteRepository,
     db: Database,
-    notes_dir: str = "notes",
+    vault: Path,
     attachments_dir: str = "attachments",
     title: str | None = None,
     category: str | None = None,
@@ -39,9 +40,9 @@ def import_file(
 
     Args:
         source: Absolute path to the file to import.
-        vault: Vault root path.
+        repo: NoteRepository for note persistence.
         db: Database instance.
-        notes_dir: Notes subdirectory name.
+        vault: Vault root path (used for attachment storage).
         attachments_dir: Attachments subdirectory name.
         title: Override title (default: filename without extension).
         category: Override category (default: "未分类").
@@ -94,8 +95,7 @@ def import_file(
     # 5. Ingest
     return ingest(
         request,
-        vault=vault,
+        repo=repo,
         db=db,
         source_config=source_config,
-        notes_dir=notes_dir,
     )

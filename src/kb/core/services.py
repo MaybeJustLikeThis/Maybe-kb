@@ -72,7 +72,9 @@ def create_note(
 
 
 def update_note(repo: NoteRepository, db: Database, file_id: str, **fields) -> Note:
-    """Update provided fields. Raises ValueError / FileNotFoundError."""
+    """Update provided fields. Raises ValueError (traversal) / FileNotFoundError (missing)."""
+    if repo.validate(file_id) is None:
+        raise ValueError(f"Path traversal blocked: {file_id}")
     note = repo.read(file_id)
     update_kwargs = {
         k: v for k, v in fields.items() if v is not None and hasattr(note, k)
@@ -85,6 +87,8 @@ def update_note(repo: NoteRepository, db: Database, file_id: str, **fields) -> N
 
 
 def delete_note(repo: NoteRepository, db: Database, file_id: str) -> None:
-    """Delete note file + DB record. Raises ValueError / FileNotFoundError."""
+    """Delete note file + DB record. Raises ValueError (traversal) / FileNotFoundError (missing)."""
+    if repo.validate(file_id) is None:
+        raise ValueError(f"Path traversal blocked: {file_id}")
     repo.delete(file_id)
     db.delete_note(file_id)

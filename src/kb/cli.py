@@ -148,10 +148,9 @@ def add_note(
                 description=desc,
                 source_context=sctx,
             ),
-            ctx.vault,
+            ctx.repo,
             ctx.db,
             source_config=src_cfg,
-            notes_dir=ctx.notes_dir,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
@@ -185,9 +184,9 @@ def import_cmd(
     try:
         note = import_file(
             file_path,
-            vault=ctx.vault,
+            repo=ctx.repo,
             db=ctx.db,
-            notes_dir=ctx.notes_dir,
+            vault=ctx.vault,
             attachments_dir=ctx.attachments_dir,
             title=override_title,
             category=override_category,
@@ -284,7 +283,7 @@ def delete(
 
     ctx = _get_context()
     try:
-        services.delete_note(ctx.vault, ctx.db, file_path)
+        services.delete_note(ctx.repo, ctx.db, file_path)
     except ValueError:
         console.print(f"[red]Path traversal blocked: {file_path}[/red]")
         raise typer.Exit(1)
@@ -454,11 +453,10 @@ def tag(
 ):
     """Add or remove tags from a note."""
     ctx = _get_context()
-    vault = ctx.vault
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     try:
-        _, note = services.resolve_note(vault, file_path)
+        _, note = services.resolve_note(ctx.repo, file_path)
     except ValueError:
         ctx.close()
         console.print(f"[red]Path traversal blocked: {file_path}[/red]")
@@ -479,7 +477,7 @@ def tag(
         console.print(f"[red]Unknown action: {action}. Use 'add' or 'remove'.[/red]")
         raise typer.Exit(1)
 
-    saved = services.save_note_file(vault, note)
+    saved = services.save_note_file(ctx.repo, note)
     ctx.db.upsert_note(saved)
     ctx.close()
 

@@ -19,7 +19,7 @@ def mock_ctx() -> MagicMock:
     ctx = MagicMock()
     ctx.vault = Path("/vault")
     ctx.db = MagicMock()
-    ctx.notes_dir = "notes"
+    ctx.repo = MagicMock()
     ctx.attachments_dir = "attachments"
     ctx.config = MagicMock()
     ctx.config.sources = {}
@@ -54,9 +54,9 @@ def test_import_file_success(tmp_path: Path, mock_ctx: MagicMock) -> None:
 
         result = import_file(
             pdf_path,
-            vault=mock_ctx.vault,
+            repo=mock_ctx.repo,
             db=mock_ctx.db,
-            notes_dir=mock_ctx.notes_dir,
+            vault=mock_ctx.vault,
             attachments_dir=mock_ctx.attachments_dir,
         )
 
@@ -90,9 +90,9 @@ def test_import_file_custom_title_and_category(tmp_path: Path, mock_ctx: MagicMo
 
         import_file(
             pdf_path,
-            vault=mock_ctx.vault,
+            repo=mock_ctx.repo,
             db=mock_ctx.db,
-            notes_dir=mock_ctx.notes_dir,
+            vault=mock_ctx.vault,
             attachments_dir=mock_ctx.attachments_dir,
             title="My Paper",
             category="AI",
@@ -117,9 +117,9 @@ def test_import_file_stores_attachment_before_convert(tmp_path: Path, mock_ctx: 
         with pytest.raises(ImportFileError, match="conversion crashed"):
             import_file(
                 pdf_path,
-                vault=mock_ctx.vault,
+                repo=mock_ctx.repo,
                 db=mock_ctx.db,
-                notes_dir=mock_ctx.notes_dir,
+                vault=mock_ctx.vault,
                 attachments_dir=mock_ctx.attachments_dir,
             )
 
@@ -142,8 +142,8 @@ def test_import_file_not_installed(tmp_path: Path, mock_ctx: MagicMock) -> None:
         with pytest.raises(ImportFileError, match="markitdown"):
             import_file(
                 pdf_path,
-                vault=mock_ctx.vault,
+                repo=mock_ctx.repo,
                 db=mock_ctx.db,
-                notes_dir=mock_ctx.notes_dir,
+                vault=mock_ctx.vault,
                 attachments_dir=mock_ctx.attachments_dir,
             )

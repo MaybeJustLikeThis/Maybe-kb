@@ -97,9 +97,8 @@ def create_mcp_server(config: KBConfig):
                     description=desc,
                     source_context=sctx,
                 ),
-                vault, db,
+                ctx.repo, db,
                 source_config=src_cfg,
-                notes_dir=ctx.notes_dir,
             )
         except ValueError as e:
             return {"error": str(e)}
@@ -193,7 +192,7 @@ def create_mcp_server(config: KBConfig):
         """Read a note's full content. Returns error dict if not found or blocked."""
         def _sync():
             try:
-                _, note = services.resolve_note(vault, file_id)
+                _, note = services.resolve_note(ctx.repo, file_id)
             except FileNotFoundError:
                 return {"error": "not_found", "file_id": file_id}
             except ValueError:

@@ -1,21 +1,19 @@
 """Unified note ingest pipeline."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from kb.core import services
 from kb.core.config import SourceConfig
 from kb.data.models import IngestRequest, Note
 from kb.data.database import Database
+from kb.data.repository import NoteRepository
 
 
 def ingest(
     request: IngestRequest,
-    vault: Path,
+    repo: NoteRepository,
     db: Database,
     *,
     source_config: SourceConfig | None = None,
-    notes_dir: str = "notes",
 ) -> Note:
     """Validate, enrich, and persist an ingest request."""
     if not request.title.strip():
@@ -34,8 +32,8 @@ def ingest(
                 tags.append(tag)
 
     return services.create_note(
-        vault_path=vault,
-        db=db,
+        repo,
+        db,
         title=request.title,
         content=request.content,
         category=category,
@@ -47,5 +45,4 @@ def ingest(
         content_type=request.content_type,
         attachments=request.attachments,
         extra_frontmatter=request.extra_frontmatter,
-        notes_dir=notes_dir,
     )

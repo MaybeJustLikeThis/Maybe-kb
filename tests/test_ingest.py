@@ -7,6 +7,7 @@ from kb.core.config import SourceConfig
 from kb.core.ingest import ingest
 from kb.data.models import IngestRequest
 from kb.data.database import Database
+from kb.data.local_repository import LocalMarkdownRepository
 
 
 def make_db(vault: Path) -> Database:
@@ -16,6 +17,11 @@ def make_db(vault: Path) -> Database:
     db = Database(vault / ".kb" / "kb.db")
     db.initialize()
     return db
+
+
+def make_repo(vault: Path, notes_dir: str = "notes") -> LocalMarkdownRepository:
+    """Build a LocalMarkdownRepository for a test vault."""
+    return LocalMarkdownRepository(vault, notes_dir=notes_dir)
 
 
 @pytest.fixture
@@ -28,7 +34,13 @@ def db(tmp_path: Path):
         database.close()
 
 
-def test_ingest_creates_note(tmp_path: Path, db: Database):
+@pytest.fixture
+def repo(tmp_path: Path):
+    """Build a LocalMarkdownRepository for the default notes dir."""
+    return make_repo(tmp_path, notes_dir="notes")
+
+
+def test_ingest_creates_note(tmp_path: Path, db: Database, repo: LocalMarkdownRepository):
     """ingest() with valid input creates a note file and DB record."""
     req = IngestRequest(
         title="Test Note",
@@ -38,7 +50,7 @@ def test_ingest_creates_note(tmp_path: Path, db: Database):
         category="tech",
     )
     source_config = SourceConfig(label="Manual")
-    note = ingest(req, tmp_path, db, source_config=source_config)
+    note = ingest(req, repo, db, source_config=source_config)
 
     assert note.title == "Test Note"
     assert note.file_id.startswith("notes/tech/")
@@ -50,6 +62,7 @@ def test_ingest_creates_note(tmp_path: Path, db: Database):
 
 def test_ingest_uses_custom_notes_dir(tmp_path: Path, db: Database):
     """ingest forwards the configured notes root to note creation."""
+    (tmp_path / "knowledge").mkdir()
     req = IngestRequest(
         title="Custom Ingest",
         content="content",
@@ -57,13 +70,16 @@ def test_ingest_uses_custom_notes_dir(tmp_path: Path, db: Database):
         category="tech",
     )
 
-    note = ingest(req, tmp_path, db, notes_dir="knowledge")
+    repo = make_repo(tmp_path, notes_dir="knowledge")
+    note = ingest(req, repo, db)
 
     assert note.file_id.startswith("knowledge/tech/")
     assert (tmp_path / note.file_id).is_file()
 
 
-def test_ingest_applies_default_category(tmp_path: Path, db: Database):
+def test_ingest_applies_default_category(
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
+):
     """When category is None, default_category from source_config is used."""
     req = IngestRequest(
         title="No Cat",
@@ -71,13 +87,13 @@ def test_ingest_applies_default_category(tmp_path: Path, db: Database):
         source_project="blog",
     )
     source_config = SourceConfig(label="Blog", default_category="articles")
-    note = ingest(req, tmp_path, db, source_config=source_config)
+    note = ingest(req, repo, db, source_config=source_config)
 
     assert note.category == "articles"
 
 
 def test_ingest_applies_default_category_for_blank_category(
-    tmp_path: Path, db: Database
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
 ):
     """When category is blank, default_category from source_config is used."""
     req = IngestRequest(
@@ -87,12 +103,14 @@ def test_ingest_applies_default_category_for_blank_category(
         category=" \t",
     )
     source_config = SourceConfig(label="Blog", default_category="articles")
-    note = ingest(req, tmp_path, db, source_config=source_config)
+    note = ingest(req, repo, db, source_config=source_config)
 
     assert note.category == "articles"
 
 
-def test_ingest_merges_auto_tags(tmp_path: Path, db: Database):
+def test_ingest_merges_auto_tags(
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
+):
     """User tags and source auto_tags are merged, deduplicated."""
     req = IngestRequest(
         title="Tagged",
@@ -104,7 +122,7 @@ def test_ingest_merges_auto_tags(tmp_path: Path, db: Database):
         label="Agent",
         auto_tags=["auto-generated", "python"],
     )
-    note = ingest(req, tmp_path, db, source_config=source_config)
+    note = ingest(req, repo, db, source_config=source_config)
 
     assert "auto-generated" in note.tags
     assert "python" in note.tags
@@ -112,7 +130,9 @@ def test_ingest_merges_auto_tags(tmp_path: Path, db: Database):
     assert note.tags.count("python") == 1
 
 
-def test_ingest_persists_import_metadata(tmp_path: Path, db: Database):
+def test_ingest_persists_import_metadata(
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
+):
     """ingest() writes source, content type, attachments, and parser metadata."""
     req = IngestRequest(
         title="Imported PDF",
@@ -132,7 +152,7 @@ def test_ingest_persists_import_metadata(tmp_path: Path, db: Database):
         tags=["imported"],
     )
 
-    note = ingest(req, tmp_path, db)
+    note = ingest(req, repo, db)
 
     assert note.source_path == "attachments/2026/06/abc123.pdf"
     assert note.source_context == "user upload"
@@ -154,15 +174,19 @@ def test_ingest_persists_import_metadata(tmp_path: Path, db: Database):
     assert "name: markitdown" in text
 
 
-def test_ingest_rejects_empty_title(tmp_path: Path, db: Database):
+def test_ingest_rejects_empty_title(
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
+):
     """Empty title raises ValueError."""
     req = IngestRequest(title="  ", content="x", source_project="manual")
     with pytest.raises(ValueError, match="title"):
-        ingest(req, tmp_path, db)
+        ingest(req, repo, db)
 
 
-def test_ingest_rejects_empty_content(tmp_path: Path, db: Database):
+def test_ingest_rejects_empty_content(
+    tmp_path: Path, db: Database, repo: LocalMarkdownRepository
+):
     """Empty content raises ValueError."""
     req = IngestRequest(title="x", content="\n\t", source_project="manual")
     with pytest.raises(ValueError, match="content"):
-        ingest(req, tmp_path, db)
+        ingest(req, repo, db)

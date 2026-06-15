@@ -39,7 +39,7 @@ def list_notes(
 
 def get_note_detail(ctx: AppContext, file_id: str) -> dict:
     """Read a note from storage and return the detailed API shape."""
-    _, note = services.resolve_note(ctx.vault, file_id)
+    _, note = services.resolve_note(ctx.repo, file_id)
     return note_to_detail(note)
 
 
@@ -205,7 +205,7 @@ def get_related_notes(ctx: AppContext, file_id: str, limit: int) -> list[dict]:
     if ctx.embedding is None:
         return []
 
-    _, note = services.resolve_note(ctx.vault, file_id)
+    _, note = services.resolve_note(ctx.repo, file_id)
     embed_result = ctx.embedding.embed(note.content)
     records = ctx.vector_store.search(embed_result.vector, limit=limit * 3 + 1)
 

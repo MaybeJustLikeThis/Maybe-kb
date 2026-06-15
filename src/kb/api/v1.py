@@ -79,8 +79,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
                     source_context=body.source_context,
                     content_type=body.content_type,
                 ),
-                ctx.vault, ctx.db,
-                notes_dir=ctx.notes_dir,
+                ctx.repo, ctx.db,
             )
             index_note_if_possible(ctx, note.file_id)
         except ValueError:
@@ -123,7 +122,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
             if value is not None
         }
         try:
-            note = services.update_note(ctx.vault, ctx.db, file_id, **fields)
+            note = services.update_note(ctx.repo, ctx.db, file_id, **fields)
             index_note_if_possible(ctx, note.file_id)
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
@@ -132,7 +131,7 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
     @router.delete("/notes/{file_id:path}")
     def delete_note(file_id: str):
         try:
-            services.delete_note(ctx.vault, ctx.db, file_id)
+            services.delete_note(ctx.repo, ctx.db, file_id)
         except (FileNotFoundError, ValueError) as exc:
             return _not_found_or_path_error(exc)
         return responses.ok({"ok": True})
@@ -266,9 +265,9 @@ def create_v1_router(ctx: AppContext) -> APIRouter:
 
             note = import_file(
                 tmp_path,
-                vault=ctx.vault,
+                repo=ctx.repo,
                 db=ctx.db,
-                notes_dir=ctx.notes_dir,
+                vault=ctx.vault,
                 attachments_dir=ctx.attachments_dir,
                 title=override_title,
                 category=override_category,
