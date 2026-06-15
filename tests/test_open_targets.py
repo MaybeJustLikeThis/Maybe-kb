@@ -48,3 +48,11 @@ def test_target_raises_on_missing(tmp_path: Path):
     repo = _repo_with_note(tmp_path)
     with pytest.raises(FileNotFoundError):
         FileTarget().build(repo, "notes/missing.md")
+
+
+def test_target_raises_value_error_on_traversal(tmp_path: Path):
+    repo = _repo_with_note(tmp_path)
+    with pytest.raises(ValueError):
+        FileTarget().build(repo, "../outside.md")
+    with pytest.raises(ValueError):
+        ObsidianTarget(vault_name="V").build(repo, "../outside.md")

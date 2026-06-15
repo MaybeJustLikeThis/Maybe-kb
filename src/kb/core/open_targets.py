@@ -25,7 +25,9 @@ class ObsidianTarget:
 
     def build(self, repo: NoteRepository, file_id: str) -> dict[str, str]:
         resolved = repo.validate(file_id)
-        if resolved is None or not resolved.is_file():
+        if resolved is None:
+            raise ValueError(f"Path traversal blocked: {file_id}")
+        if not resolved.is_file():
             raise FileNotFoundError(file_id)
         return {
             "obsidian_uri": (
@@ -43,7 +45,9 @@ class FileTarget:
 
     def build(self, repo: NoteRepository, file_id: str) -> dict[str, str]:
         resolved = repo.validate(file_id)
-        if resolved is None or not resolved.is_file():
+        if resolved is None:
+            raise ValueError(f"Path traversal blocked: {file_id}")
+        if not resolved.is_file():
             raise FileNotFoundError(file_id)
         return {
             "file_path": resolved.as_posix(),
