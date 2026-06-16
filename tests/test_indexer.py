@@ -588,6 +588,23 @@ def test_index_files_external_sources_collects_hexo_asset_folder(
     assert attachments[0].startswith("attachments/")
 
 
+def test_index_files_external_sources_silently_skipped_for_non_local_repo(db):
+    """Non-local backends (FakeRepository) silently ignore external_sources:
+    no crash, external files not synced, normal indexing proceeds.
+
+    Pins the False branch of indexer.py's
+    `if external_sources and isinstance(repo, LocalMarkdownRepository)` guard.
+    """
+    repo = FakeRepository()
+    repo.write(Note(file_id="notes/in-vault.md", title="In", content="body"))
+    external = Path("/nonexistent/external-dir")  # never read: isinstance guard is False
+
+    indexed, _ = index_files(repo, db, full=True, external_sources=[external])
+
+    assert indexed == 1  # only the in-repo note indexed; external skipped
+    assert db.get_note("notes/in-vault.md") is not None
+
+
 def test_index_vectors_empty_changed_ids(db: Database, tmp_path: Path):
     """index_vectors with empty set() should return 0."""
     pytest.importorskip("sentence_transformers")
