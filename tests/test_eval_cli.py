@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests._fakes import FakeEmbeddingProvider, FakeLLM
+
 runner = CliRunner()
 
 
@@ -15,47 +17,15 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 
 
-class _FakeEmbedding:
-    """Returns a fixed 512-dim vector for any input."""
-
-    def embed(self, text: str):
-        from kb.data.embedding import EmbeddingResult
-
-        return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-
-    def embed_batch(self, texts: list[str]):
-        return [self.embed(t) for t in texts]
-
-    @property
-    def dimension(self) -> int:
-        return 512
-
-
-class _FakeLLM:
-    """Returns a stub LLM response."""
-
-    def generate(self, prompt: str, *, system_prompt: str = ""):
-        from kb.data.llm import LLMResponse
-
-        return LLMResponse(text="mock answer", tokens_used=5, model="mock")
-
-    def generate_stream(self, prompt: str, *, system_prompt: str = ""):
-        yield None
-
-    @property
-    def model_name(self) -> str:
-        return "mock"
-
-
 def _mock_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch provider factories so init / index / eval run without real models."""
     monkeypatch.setattr(
         "kb.core.context.create_embedding_provider",
-        lambda c: _FakeEmbedding(),
+        lambda c: FakeEmbeddingProvider(dimension=512),
     )
     monkeypatch.setattr(
         "kb.core.context.create_llm_provider",
-        lambda c: _FakeLLM(),
+        lambda c: FakeLLM(response_text="mock answer", model="mock"),
     )
 
 

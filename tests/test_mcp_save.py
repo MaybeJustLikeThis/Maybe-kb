@@ -247,18 +247,7 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
     """kb_save best-effort indexes the created note and returns vector count."""
     _prepare_vault(tmp_path, monkeypatch)
 
-    from kb.data.embedding import EmbeddingResult
-
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[1.0, 0.0, 0.0], dimension=3, tokens_used=len(text))
-
-        def embed_batch(self, texts):
-            return [self.embed(text) for text in texts]
-
-        @property
-        def dimension(self):
-            return 3
+    from tests._fakes import FakeEmbeddingProvider
 
     calls: list[tuple[str, str, object]] = []
 
@@ -282,7 +271,7 @@ def test_kb_save_returns_indexed_count(tmp_path: Path, monkeypatch: pytest.Monke
     )
     from kb.mcp_server import create_mcp_server
     mcp = create_mcp_server(config)
-    mcp._kb_context.embedding = FakeEmbedding()
+    mcp._kb_context.embedding = FakeEmbeddingProvider(dimension=3)
 
     async def _run():
         result = await mcp.call_tool("kb_save", {
