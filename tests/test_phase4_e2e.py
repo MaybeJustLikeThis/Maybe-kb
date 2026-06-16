@@ -251,40 +251,29 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
 # ── Format context integration tests ───────────────────────────────────
 
 def test_search_result_to_context_roundtrip():
-    """Verify SearchResult → format_context → build_rag_prompt chain."""
-    from kb.core.search import SearchResult
+    """Verify ChunkSearchResult → format_context → build_rag_prompt chain."""
+    from kb.core.search import ChunkSearchResult
     from kb.core.rag import format_context, build_rag_prompt
-    from kb.data.database import Database
-    from kb.data.models import Note
 
-    db = Database(Path("/tmp/phase4-roundtrip.db"))
-    db.initialize()
-    db.upsert_note(Note(
-        file_id="a", title="Note A", content="Content A", tags=[],
-        category="", created_at="2026-01-01T00:00:00",
-        updated_at="2026-01-01T00:00:00",
-    ))
-    db.upsert_note(Note(
-        file_id="b", title="Note B", content="Content B", tags=[],
-        category="", created_at="2026-01-01T00:00:00",
-        updated_at="2026-01-01T00:00:00",
-    ))
-    try:
-        results = [
-            SearchResult(file_id="a", title="Note A", score=0.9, source="hybrid"),
-            SearchResult(file_id="b", title="Note B", score=0.5, source="fts5"),
-        ]
-        context = format_context(results, db)
-        assert "Note A" in context
-        assert "Content A" in context
-        assert "[1]" in context
-        assert "[2]" in context
+    results = [
+        ChunkSearchResult(
+            file_id="a", chunk_id=0, text="Content A", title="Note A",
+            score=0.9, source="hybrid",
+        ),
+        ChunkSearchResult(
+            file_id="b", chunk_id=0, text="Content B", title="Note B",
+            score=0.5, source="fts5",
+        ),
+    ]
+    context = format_context(results)
+    assert "Note A" in context
+    assert "Content A" in context
+    assert "[1]" in context
+    assert "[2]" in context
 
-        prompt = build_rag_prompt("test query", context)
-        assert "test query" in prompt
-        assert "Note A" in prompt
-    finally:
-        db.close()
+    prompt = build_rag_prompt("test query", context)
+    assert "test query" in prompt
+    assert "Note A" in prompt
 
 
 def test_rag_query_orchestration_with_mocks(db, monkeypatch: pytest.MonkeyPatch):

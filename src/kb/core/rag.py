@@ -47,6 +47,7 @@ class RAGResponse:
     tokens_used: int
     model: str
     sources: list[RAGSource] = field(default_factory=list)
+    error: bool = False
 
 
 def format_context(
@@ -169,6 +170,7 @@ def rag_query(
             tokens_used=0,
             model="",
             sources=[],
+            error=True,
         )
 
 

@@ -500,6 +500,8 @@ def ask(
             with console.status("[bold green]Thinking..."):
                 response = rag_query(query, ctx.db, ctx.embedding, ctx.vector_store, ctx.llm, top_k=top_k)
             console.print(response.text)
+            if response.error:
+                raise typer.Exit(1)
     finally:
         ctx.close()
 

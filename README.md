@@ -10,7 +10,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| **笔记管理** | Markdown + YAML frontmatter，支持 `blog` / `agent` / `manual` 多来源分类 |
+| **笔记管理** | Markdown + YAML frontmatter，支持 `blog` / `agent` / `manual` 多来源分类，缺省归入"未分类" |
 | **全文搜索** | SQLite FTS5 + jieba 中文分词 |
 | **语义搜索** | `BAAI/bge-small-zh-v1.5` 本地 embedding + LanceDB 余弦相似度 |
 | **混合搜索 + RAG** | FTS5 与语义搜索 RRF 融合，接入本地 LLM（默认 Ollama qwen2.5:7b）生成回答 |
