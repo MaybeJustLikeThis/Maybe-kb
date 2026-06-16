@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests._fakes import FakeEmbeddingProvider, FakeLLM, FakeVectorStore
+
 runner = CliRunner()
 
 
@@ -79,31 +81,11 @@ def test_cli_ask_command_help(kb_project: Path):
 def test_cli_ask_with_mocked_llm(kb_project: Path, monkeypatch: pytest.MonkeyPatch):
     """kb ask returns LLM response via mock."""
     from kb.cli import app
-    from kb.data.embedding import EmbeddingResult
 
     runner.invoke(app, ["init", "--import-existing"])
 
-    class FakeLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            from kb.data.llm import LLMResponse
-            return LLMResponse(text="Python asyncio answer", tokens_used=10, model="mock")
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield None
-        @property
-        def model_name(self):
-            return "mock"
-
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM(response_text="Python asyncio answer", model="mock"))
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     result = runner.invoke(app, ["ask", "什么是 Python 异步？", "--top-k", "3"])
     assert result.exit_code == 0
@@ -113,32 +95,11 @@ def test_cli_ask_with_mocked_llm(kb_project: Path, monkeypatch: pytest.MonkeyPat
 def test_cli_ask_stream_with_mocked_llm(kb_project: Path, monkeypatch: pytest.MonkeyPatch):
     """kb ask --stream streams chunks."""
     from kb.cli import app
-    from kb.data.llm import LLMResponse
-    from kb.data.embedding import EmbeddingResult
 
     runner.invoke(app, ["init", "--import-existing"])
 
-    class FakeLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="mock", tokens_used=0, model="mock")
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield LLMResponse(text="chunk1", tokens_used=0, model="mock")
-            yield LLMResponse(text="chunk2", tokens_used=0, model="mock")
-        @property
-        def model_name(self):
-            return "mock"
-
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM(stream_chunks=["chunk1", "chunk2"], model="mock"))
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     result = runner.invoke(app, ["ask", "test", "--stream"])
     assert result.exit_code == 0
@@ -152,33 +113,13 @@ def test_api_chat_ask_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyPatc
     from kb.cli import app
     from kb.server import create_app
     from kb.core.config import load_config
-    from kb.data.llm import LLMResponse
-    from kb.data.embedding import EmbeddingResult
     from fastapi.testclient import TestClient
 
     runner.invoke(app, ["init", "--import-existing"])
     config = load_config(kb_project)
 
-    class FakeLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="RAG answer", tokens_used=5, model="mock")
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield None
-        @property
-        def model_name(self):
-            return "mock"
-
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM(response_text="RAG answer", model="mock"))
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     web_app = create_app(config)
     client = TestClient(web_app)
@@ -196,34 +137,13 @@ def test_api_chat_stream_with_mock(kb_project: Path, monkeypatch: pytest.MonkeyP
     from kb.cli import app
     from kb.server import create_app
     from kb.core.config import load_config
-    from kb.data.llm import LLMResponse
-    from kb.data.embedding import EmbeddingResult
     from fastapi.testclient import TestClient
 
     runner.invoke(app, ["init", "--import-existing"])
     config = load_config(kb_project)
 
-    class FakeLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="mock", tokens_used=0, model="mock")
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield LLMResponse(text="Hello", tokens_used=0, model="mock")
-            yield LLMResponse(text=" World", tokens_used=0, model="mock")
-        @property
-        def model_name(self):
-            return "mock"
-
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM(stream_chunks=["Hello", " World"], model="mock"))
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     web_app = create_app(config)
     client = TestClient(web_app)
@@ -297,35 +217,23 @@ def test_mcp_rag_tool_registered():
 
 def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
     """kb_rag_query MCP tool returns answer dict."""
+    from kb.data.llm import LLMResponse
     from kb.core.config import KBConfig
     from kb.mcp_server import create_mcp_server
-    from kb.data.llm import LLMResponse
-    from kb.data.embedding import EmbeddingResult
 
-    class FakeLLM:
+    # Local subclass: assertion pins tokens_used=5, which FakeLLM can't express
+    # (canonical returns tokens_used=0). Override only generate(); inherit the rest.
+    class McpFakeLLM(FakeLLM):
         def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="MCP answer", tokens_used=5, model="mock")
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield None
-        @property
-        def model_name(self):
-            return "mock"
+            self.recorded_prompts.append(prompt)
+            return LLMResponse(text="MCP answer", tokens_used=5, model=self.model_name)
 
-    class FakeEmbedding:
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM())
-    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbedding())
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: McpFakeLLM(response_text="MCP answer", model="mock"))
+    monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     config = KBConfig(vault_path=Path("/tmp/mcp-rag-test"))
     server = create_mcp_server(config)
-    server._kb_context.embedding = FakeEmbedding()
+    server._kb_context.embedding = FakeEmbeddingProvider(dimension=512)
 
     tool = next(
         t for t in server._tool_manager._tools.values()
@@ -379,48 +287,23 @@ def test_search_result_to_context_roundtrip():
         db.close()
 
 
-def test_rag_query_orchestration_with_mocks(monkeypatch: pytest.MonkeyPatch):
+def test_rag_query_orchestration_with_mocks(db, monkeypatch: pytest.MonkeyPatch):
     """Full rag_query orchestration with all providers mocked."""
     from kb.core.rag import RAGResponse, rag_query
-    from kb.data.database import Database
-    from kb.data.llm import LLMResponse
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
     from kb.data.models import Note
 
-    db = Database(Path("/tmp/phase4-orch.db"))
-    db.initialize()
     db.upsert_note(Note(
         file_id="test-id", title="Test Note", content="Python async content.",
         tags=["python"], category="tech",
         created_at="2026-01-01T00:00:00", updated_at="2026-01-01T00:00:00",
     ))
-    try:
-        class MockLLM:
-            def generate(self, prompt, *, system_prompt=""):
-                return LLMResponse(text="Generated answer", tokens_used=3, model="mock")
-            @property
-            def model_name(self):
-                return "mock"
 
-        class MockEmbedding(EmbeddingProvider):
-            def embed(self, text):
-                return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-            def embed_batch(self, texts):
-                return [self.embed(t) for t in texts]
-            @property
-            def dimension(self):
-                return 512
+    llm = FakeLLM(response_text="Generated answer", model="mock")
+    provider = FakeEmbeddingProvider(dimension=512)
+    store = FakeVectorStore()
 
-        class MockStore:
-            def search(self, query_vector, limit=20):
-                return []
-            def close(self):
-                pass
-
-        response = rag_query("test query", db, MockEmbedding(), MockStore(), MockLLM(), top_k=3)
-        assert isinstance(response, RAGResponse)
-        assert response.text == "Generated answer"
-        assert response.model == "mock"
-        assert response.sources == []
-    finally:
-        db.close()
+    response = rag_query("test query", db, provider, store, llm, top_k=3)
+    assert isinstance(response, RAGResponse)
+    assert response.text == "Generated answer"
+    assert response.model == "mock"
+    assert response.sources == []
