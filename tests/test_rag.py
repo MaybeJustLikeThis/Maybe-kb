@@ -1,12 +1,13 @@
 """Tests for RAG orchestration."""
-from pathlib import Path
 from kb.data.models import Note
+from kb.data.vector import VectorRecord
 from kb.core.search import ChunkSearchResult
 from kb.core.rag import (
     format_context, build_rag_prompt, RAG_SYSTEM_PROMPT,
     rag_query_stream, build_rag_sources, rag_source_to_dict,
 )
-from kb.data.llm import LLMResponse
+
+from tests._fakes import FakeEmbeddingProvider, FakeLLM, FakeVectorStore
 
 
 def test_format_context_empty():
@@ -59,41 +60,13 @@ def test_rag_system_prompt_exists():
     assert "不编造" in RAG_SYSTEM_PROMPT
 
 
-def test_rag_query_returns_llm_response():
+def test_rag_query_returns_llm_response(db):
     """Verify rag_query signature and orchestration pattern."""
     from kb.core.rag import RAGResponse, rag_query
-    from kb.data.database import Database
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
 
-    class MockLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="Mocked answer", tokens_used=10, model="mock")
-        @property
-        def model_name(self):
-            return "mock"
-
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    class MockVectorStore:
-        def search(self, query_vector, limit=20):
-            return []
-        def get_chunks_by_file_id(self, file_id):
-            return []
-        def close(self):
-            pass
-
-    db = Database(Path("/tmp/rag-test.db"))
-    db.initialize()
-    llm = MockLLM()
-    provider = MockEmbedding()
-    store = MockVectorStore()
+    llm = FakeLLM(response_text="Mocked answer", model="mock")
+    provider = FakeEmbeddingProvider(dimension=512)
+    store = FakeVectorStore()
 
     response = rag_query("test", db, provider, store, llm, top_k=3)
     assert isinstance(response, RAGResponse)
@@ -101,39 +74,11 @@ def test_rag_query_returns_llm_response():
     assert response.sources == []
 
 
-def test_rag_query_stream_yields_chunks():
+def test_rag_query_stream_yields_chunks(db):
     """rag_query_stream collects and joins all streamed LLMResponse chunks."""
-    from kb.data.database import Database
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
-
-    db = Database(Path("/tmp/rag-stream-test.db"))
-    db.initialize()
-
-    class MockLLM:
-        def generate_stream(self, prompt, *, system_prompt=""):
-            yield LLMResponse(text="streamed", tokens_used=0, model="mock")
-            yield LLMResponse(text=" answer", tokens_used=0, model="mock")
-
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
-
-    class MockVectorStore:
-        def search(self, query_vector, limit=20):
-            return []
-        def get_chunks_by_file_id(self, file_id):
-            return []
-        def close(self):
-            pass
-
-    llm = MockLLM()
-    provider = MockEmbedding()
-    store = MockVectorStore()
+    llm = FakeLLM(stream_chunks=["streamed", " answer"])
+    provider = FakeEmbeddingProvider(dimension=512)
+    store = FakeVectorStore()
 
     chunks = list(rag_query_stream("test query", db, provider, store, llm))
 
@@ -142,38 +87,15 @@ def test_rag_query_stream_yields_chunks():
     assert joined == "streamed answer"
 
 
-def test_rag_query_handles_llm_failure(tmp_path):
+def test_rag_query_handles_llm_failure(db):
     """rag_query returns error RAGResponse when LLM raises."""
     from kb.core.rag import RAGResponse, rag_query
-    from kb.data.database import Database
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
 
-    class FailingLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            raise ConnectionError("Ollama not reachable")
-        @property
-        def model_name(self):
-            return "failing"
+    llm = FakeLLM(raises=ConnectionError("Ollama not reachable"))
+    provider = FakeEmbeddingProvider(dimension=3)
+    store = FakeVectorStore()
 
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 3, dimension=3, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 3
-
-    class MockVectorStore:
-        def search(self, query_vector, limit=20):
-            return []
-        def get_chunks_by_file_id(self, file_id):
-            return []
-
-    db = Database(tmp_path / "rag-err.db")
-    db.initialize()
-
-    response = rag_query("test", db, MockEmbedding(), MockVectorStore(), FailingLLM())
+    response = rag_query("test", db, provider, store, llm)
     assert isinstance(response, RAGResponse)
     assert "失败" in response.text
     assert response.tokens_used == 0
@@ -181,46 +103,23 @@ def test_rag_query_handles_llm_failure(tmp_path):
     assert response.sources == []
 
 
-def test_rag_query_stream_handles_failure(tmp_path):
+def test_rag_query_stream_handles_failure(db):
     """rag_query_stream yields error chunk when LLM raises."""
-    from kb.data.database import Database
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
     from kb.core.rag import rag_query_stream
 
-    class FailingLLM:
-        def generate_stream(self, prompt, *, system_prompt=""):
-            raise RuntimeError("stream interrupted")
+    llm = FakeLLM(raises=RuntimeError("stream interrupted"))
+    provider = FakeEmbeddingProvider(dimension=3)
+    store = FakeVectorStore()
 
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 3, dimension=3, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 3
-
-    class MockVectorStore:
-        def search(self, query_vector, limit=20):
-            return []
-        def get_chunks_by_file_id(self, file_id):
-            return []
-
-    db = Database(tmp_path / "rag-stream-err.db")
-    db.initialize()
-
-    chunks = list(rag_query_stream("test", db, MockEmbedding(), MockVectorStore(), FailingLLM()))
+    chunks = list(rag_query_stream("test", db, provider, store, llm))
     assert len(chunks) == 1
     assert "失败" in chunks[0].text
 
 
-def test_build_rag_sources_includes_note_metadata(tmp_path):
+def test_build_rag_sources_includes_note_metadata(db):
     """RAG sources expose note identity, snippet, source, and attachments."""
     from kb.core.rag import build_rag_sources
-    from kb.data.database import Database
 
-    db = Database(tmp_path / ".kb" / "test.db")
-    db.initialize()
     db.upsert_note(Note(
         file_id="notes/doc/imported.md",
         title="Imported Doc",
@@ -264,15 +163,10 @@ def test_rag_source_to_dict_includes_section_path():
     assert d["file_id"] == "a.md"
 
 
-def test_rag_query_returns_sources(tmp_path):
+def test_rag_query_returns_sources(db):
     """rag_query returns answer metadata plus traceable sources."""
     from kb.core.rag import RAGResponse, rag_query
-    from kb.data.database import Database
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
-    from kb.data.vector import VectorRecord
 
-    db = Database(tmp_path / ".kb" / "rag.db")
-    db.initialize()
     db.upsert_note(Note(
         file_id="notes/a.md",
         title="Source A",
@@ -281,43 +175,26 @@ def test_rag_query_returns_sources(tmp_path):
         attachments=["attachments/a.png"],
     ))
 
-    class MockLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="Mocked answer", tokens_used=10, model="mock")
-        @property
-        def model_name(self):
-            return "mock"
-
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1, 0.2, 0.3], dimension=3, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(text) for text in texts]
-        @property
-        def dimension(self):
-            return 3
-
-    class MockVectorStore:
-        def search(self, query_vector, limit=20):
-            return [
-                VectorRecord(
-                    id="notes/a.md",
-                    chunk_id=0,
-                    vector=[0.1, 0.2, 0.3],
-                    text="Pinia store setup notes",
-                    section_path=["## Setup"],
-                    content_type="paragraph",
-                )
-            ]
-        def get_chunks_by_file_id(self, file_id):
-            return []
+    llm = FakeLLM(response_text="Mocked answer", model="mock")
+    provider = FakeEmbeddingProvider(dimension=3)
+    store = FakeVectorStore()
+    store.upsert_chunks("notes/a.md", [
+        VectorRecord(
+            id="notes/a.md",
+            chunk_id=0,
+            vector=[0.1, 0.2, 0.3],
+            text="Pinia store setup notes",
+            section_path=["## Setup"],
+            content_type="paragraph",
+        ),
+    ])
 
     response = rag_query(
         "Pinia",
         db,
-        MockEmbedding(),
-        MockVectorStore(),
-        MockLLM(),
+        provider,
+        store,
+        llm,
         top_k=3,
     )
 
@@ -327,16 +204,11 @@ def test_rag_query_returns_sources(tmp_path):
     assert response.sources[0].attachments == ["attachments/a.png"]
 
 
-def test_rag_end_to_end_chunk_level(tmp_path):
+def test_rag_end_to_end_chunk_level(db, tmp_path):
     """Full RAG flow: search -> context -> generate returns chunk-aware sources."""
     from kb.core.rag import RAGResponse, rag_query
-    from kb.data.database import Database
-    from kb.data.models import Note
-    from kb.data.embedding import EmbeddingProvider, EmbeddingResult
-    from kb.data.vector import VectorStore, VectorRecord
+    from kb.data.vector import VectorStore
 
-    db = Database(tmp_path / ".kb" / "kb.db")
-    db.initialize()
     db.upsert_note(Note(
         file_id="notes/python.md",
         title="Python 异步编程",
@@ -344,21 +216,8 @@ def test_rag_end_to_end_chunk_level(tmp_path):
         tags=["python"],
     ))
 
-    class MockLLM:
-        def generate(self, prompt, *, system_prompt=""):
-            return LLMResponse(text="asyncio 是 Python 的异步框架", tokens_used=10, model="mock")
-        @property
-        def model_name(self):
-            return "mock"
-
-    class MockEmbedding(EmbeddingProvider):
-        def embed(self, text):
-            return EmbeddingResult(vector=[0.1] * 512, dimension=512, tokens_used=0)
-        def embed_batch(self, texts):
-            return [self.embed(t) for t in texts]
-        @property
-        def dimension(self):
-            return 512
+    llm = FakeLLM(response_text="asyncio 是 Python 的异步框架", model="mock")
+    provider = FakeEmbeddingProvider(dimension=512)
 
     store = VectorStore(tmp_path / ".kb" / "vectors.lance")
     store.upsert_chunks("notes/python.md", [
@@ -380,7 +239,7 @@ def test_rag_end_to_end_chunk_level(tmp_path):
 
     response = rag_query(
         "什么是 asyncio",
-        db, MockEmbedding(), store, MockLLM(), top_k=3,
+        db, provider, store, llm, top_k=3,
     )
 
     assert isinstance(response, RAGResponse)
