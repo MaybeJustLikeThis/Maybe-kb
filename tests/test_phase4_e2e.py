@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests._fakes import FakeEmbeddingProvider, FakeLLM, FakeVectorStore
+from tests._helpers import strip_ansi
 
 runner = CliRunner()
 
@@ -75,7 +76,7 @@ def test_cli_ask_command_help(kb_project: Path):
     runner.invoke(app, ["init"])
     result = runner.invoke(app, ["ask", "--help"])
     assert result.exit_code == 0
-    assert "--stream" in result.output
+    assert "--stream" in strip_ansi(result.output)
 
 
 def test_cli_ask_with_mocked_llm(kb_project: Path, monkeypatch: pytest.MonkeyPatch):

@@ -8,6 +8,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 from kb.cli import app
 
+from tests._helpers import strip_ansi
+
 runner = CliRunner()
 
 
@@ -152,8 +154,9 @@ def test_kb_serve_help(kb_dir: Path):
     """kb serve has --help."""
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "--host" in result.output
-    assert "--port" in result.output
+    out = strip_ansi(result.output)
+    assert "--host" in out
+    assert "--port" in out
 
 
 def test_kb_migrate_dry_run(kb_dir: Path):
@@ -238,17 +241,19 @@ def test_kb_serve_params(kb_dir: Path):
     """kb serve --help shows host, port, and watch options."""
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "--host" in result.stdout
-    assert "--port" in result.stdout
-    assert "--watch" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "--host" in out
+    assert "--port" in out
+    assert "--watch" in out
 
 
 def test_kb_ask_params(kb_dir: Path):
     """kb ask --help shows --top-k and --stream options."""
     result = runner.invoke(app, ["ask", "--help"])
     assert result.exit_code == 0
-    assert "--top-k" in result.stdout
-    assert "--stream" in result.stdout
+    out = strip_ansi(result.stdout)
+    assert "--top-k" in out
+    assert "--stream" in out
 
 
 def test_kb_ask_no_llm_config(kb_dir: Path):
