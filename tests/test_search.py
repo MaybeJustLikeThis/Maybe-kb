@@ -17,11 +17,10 @@ def test_rrf_score_decreases_with_rank():
     assert 1.0 / (60 + 1) > 1.0 / (60 + 10)
 
 
-def test_hybrid_search_returns_chunk_results(tmp_path):
+def test_hybrid_search_returns_chunk_results(tmp_path, embedding_provider):
     """Hybrid search returns ChunkSearchResult with section_path."""
     from kb.data.database import Database
     from kb.data.models import Note
-    from kb.data.embedding import LocalEmbeddingProvider
     from kb.data.vector import VectorStore, VectorRecord
 
     db = Database(tmp_path / ".kb" / "kb.db")
@@ -34,7 +33,7 @@ def test_hybrid_search_returns_chunk_results(tmp_path):
         category="tech",
     ))
 
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     store = VectorStore(tmp_path / ".kb" / "vectors.lance")
     store.upsert_chunks("a.md", [
         VectorRecord(
@@ -57,11 +56,10 @@ def test_hybrid_search_returns_chunk_results(tmp_path):
     store.close()
 
 
-def test_hybrid_search_chunk_level_ranking(tmp_path):
+def test_hybrid_search_chunk_level_ranking(tmp_path, embedding_provider):
     """Multiple chunks from same note are ranked independently."""
     from kb.data.database import Database
     from kb.data.models import Note
-    from kb.data.embedding import LocalEmbeddingProvider
     from kb.data.vector import VectorStore, VectorRecord
 
     db = Database(tmp_path / ".kb" / "kb.db")
@@ -73,7 +71,7 @@ def test_hybrid_search_chunk_level_ranking(tmp_path):
         tags=["python"],
     ))
 
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     store = VectorStore(tmp_path / ".kb" / "vectors.lance")
     store.upsert_chunks("a.md", [
         VectorRecord(
@@ -100,11 +98,10 @@ def test_hybrid_search_chunk_level_ranking(tmp_path):
     store.close()
 
 
-def test_hybrid_search_both_sources(tmp_path):
+def test_hybrid_search_both_sources(tmp_path, embedding_provider):
     """Hybrid search fuses FTS5 and semantic results."""
     from kb.data.database import Database
     from kb.data.models import Note
-    from kb.data.embedding import LocalEmbeddingProvider
     from kb.data.vector import VectorStore, VectorRecord
 
     db = Database(tmp_path / ".kb" / "kb.db")
@@ -118,7 +115,7 @@ def test_hybrid_search_both_sources(tmp_path):
     for n in notes:
         db.upsert_note(n)
 
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     store = VectorStore(tmp_path / ".kb" / "vectors.lance")
     store.upsert_chunks("a.md", [
         VectorRecord(id="a.md", chunk_id=0, vector=provider.embed("asyncio 协程并发编程").vector, text="asyncio"),
@@ -138,15 +135,14 @@ def test_hybrid_search_both_sources(tmp_path):
     store.close()
 
 
-def test_hybrid_search_empty_both(tmp_path):
+def test_hybrid_search_empty_both(tmp_path, embedding_provider):
     """Both searches empty returns empty list."""
     from kb.data.database import Database
-    from kb.data.embedding import LocalEmbeddingProvider
     from kb.data.vector import VectorStore
 
     db = Database(tmp_path / ".kb" / "kb.db")
     db.initialize()
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     store = VectorStore(tmp_path / ".kb" / "vectors.lance")
 
     results = hybrid_search("nonexistent query xyz123", db, provider, store, limit=10)

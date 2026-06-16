@@ -365,10 +365,9 @@ def test_semantic_search_empty_store(client):
     assert resp.json()["data"] == []
 
 
-def test_semantic_search_finds_similar(client):
+def test_semantic_search_finds_similar(client, embedding_provider):
     """Semantic search returns notes after vectors are populated."""
     from kb.data.vector import VectorStore, VectorRecord
-    from kb.data.embedding import LocalEmbeddingProvider
 
     resp1 = client.post("/api/v1/notes", json={
         "title": "Python Async", "content": "asyncio 协程并发编程",
@@ -379,7 +378,7 @@ def test_semantic_search_finds_similar(client):
     fid1 = resp1.json()["data"]["file_id"]
     fid2 = resp2.json()["data"]["file_id"]
 
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     v1 = provider.embed("asyncio 协程并发编程").vector
     v2 = provider.embed("今天天气很好适合散步").vector
 

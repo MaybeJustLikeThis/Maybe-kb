@@ -36,3 +36,15 @@ def local_repo(vault: Path) -> LocalMarkdownRepository:
     return LocalMarkdownRepository(
         vault, notes_dir="notes", attachments_dir="attachments"
     )
+
+
+@pytest.fixture(scope="session")
+def embedding_provider():
+    """Shared LocalEmbeddingProvider — loads the BGE model once per session.
+
+    Cold-loading torch + the model is the dominant CI cost. Sharing one
+    instance across the embedding/search/server tests avoids reloading it
+    per test. (Tests verifying factory construction still build their own.)
+    """
+    from kb.data.embedding import LocalEmbeddingProvider
+    return LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")

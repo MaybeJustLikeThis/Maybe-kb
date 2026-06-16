@@ -17,18 +17,18 @@ def test_embed_result_fields():
     assert r.tokens_used == 5
 
 
-def test_local_provider_dimension():
+def test_local_provider_dimension(embedding_provider):
     """Local provider returns 512-dim vectors (BGE-small-zh-v1.5)."""
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     result = provider.embed("测试文本")
     assert result.dimension == 512
     assert len(result.vector) == 512
     assert result.tokens_used > 0
 
 
-def test_local_provider_batch():
+def test_local_provider_batch(embedding_provider):
     """Batch produces same vectors as individual calls."""
-    provider = LocalEmbeddingProvider("BAAI/bge-small-zh-v1.5")
+    provider = embedding_provider
     texts = ["文本一", "文本二"]
     results = provider.embed_batch(texts)
     assert len(results) == 2
