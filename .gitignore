@@ -17,6 +17,5 @@ eval/results/
 .playwright-mcp/
 web/screenshots/
 .claude/
-.claude-plugin/
 .codex/
 docs/
