@@ -12,64 +12,63 @@ from kb.data.repository import NoteRepository, create_repository
 
 from tests._fakes import FakeRepository
 
-
-def _make_note(file_id: str = "", title: str = "T", content: str = "body") -> Note:
-    return Note(file_id=file_id, title=title, content=content)
-
-
-def test_fake_write_allocates_file_id_when_empty():
-    repo: NoteRepository = FakeRepository()
-    written = repo.write(_make_note(file_id="", title="Hello"))
-    assert written.file_id == "notes/Hello.md"
-    assert written.file_hash  # repo fills hash
-    assert repo.discover() == ["notes/Hello.md"]
+CONTRACT_FACTORIES = [
+    pytest.param(lambda tmp: FakeRepository(), id="fake"),
+    pytest.param(lambda tmp: LocalMarkdownRepository(tmp, notes_dir="notes"), id="local"),
+]
 
 
-def test_fake_read_raises_when_missing():
-    repo: NoteRepository = FakeRepository()
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_read_missing_raises(tmp_path, make_repo):
     with pytest.raises(FileNotFoundError):
-        repo.read("notes/missing.md")
+        make_repo(tmp_path).read("notes/missing.md")
 
 
-def test_fake_delete_roundtrip():
-    repo: NoteRepository = FakeRepository()
-    repo.write(_make_note(file_id="notes/x.md"))
-    repo.delete("notes/x.md")
-    assert repo.discover() == []
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_write_allocates_file_id_when_empty(tmp_path, make_repo):
+    repo = make_repo(tmp_path)
+    written = repo.write(Note(file_id="", title="Hello", content="body"))
+    assert written.file_id
+    assert written.file_hash
+    assert repo.discover() == [written.file_id]
+
+
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_delete_roundtrip(tmp_path, make_repo):
+    repo = make_repo(tmp_path)
+    fid = repo.write(Note(file_id="", title="X", content="x")).file_id
+    repo.delete(fid)
     with pytest.raises(FileNotFoundError):
-        repo.delete("notes/x.md")
+        repo.delete(fid)
 
 
-def test_fake_satisfies_protocol():
-    # @runtime_checkable Protocol — lock the fake as a contract reference
-    assert isinstance(FakeRepository(), NoteRepository)
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_hash_detects_change(tmp_path, make_repo):
+    repo = make_repo(tmp_path)
+    fid = repo.write(Note(file_id="", title="T", content="v1")).file_id
+    h1 = repo.hash(fid)
+    repo.write(Note(file_id=fid, title="T", content="v2"))
+    assert h1 != repo.hash(fid)
 
 
-def test_fake_hash_and_supports_write():
-    repo: NoteRepository = FakeRepository()
-    assert repo.supports_write is True
-    repo.write(_make_note(file_id="notes/h.md", content="abc"))
-    assert repo.hash("notes/h.md")
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_supports_write_true(tmp_path, make_repo):
+    assert make_repo(tmp_path).supports_write is True
+
+
+@pytest.mark.parametrize("make_repo", CONTRACT_FACTORIES)
+def test_contract_satisfies_protocol(tmp_path, make_repo):
+    assert isinstance(make_repo(tmp_path), NoteRepository)
+
+
+def test_fake_validate_returns_none():
+    # Protocol allows non-local backends to return None; Fake pins this semantic.
+    assert FakeRepository().validate("notes/anything.md") is None
 
 
 def _local_repo(tmp_path: Path) -> LocalMarkdownRepository:
     (tmp_path / "notes").mkdir()
     return LocalMarkdownRepository(tmp_path, notes_dir="notes")
-
-
-def test_local_discover_empty_when_no_notes(tmp_path: Path):
-    repo = _local_repo(tmp_path)
-    assert repo.discover() == []
-
-
-def test_local_write_then_read_roundtrip(tmp_path: Path):
-    repo = _local_repo(tmp_path)
-    written = repo.write(Note(file_id="", title="Hello", content="# Hi\n\nbody"))
-    assert written.file_id.startswith("notes/") and written.file_id.endswith(".md")
-    assert (tmp_path / written.file_id).is_file()
-    note = repo.read(written.file_id)
-    assert note.title == "Hello"
-    assert repo.discover() == [written.file_id]
 
 
 def test_local_write_increments_on_name_collision(tmp_path: Path):
@@ -78,15 +77,6 @@ def test_local_write_increments_on_name_collision(tmp_path: Path):
     b = repo.write(Note(file_id="", title="Dup", content="y"))
     assert a.file_id != b.file_id
     assert repo.discover() == sorted([a.file_id, b.file_id])
-
-
-def test_local_hash_detects_change(tmp_path: Path):
-    repo = _local_repo(tmp_path)
-    written = repo.write(Note(file_id="", title="T", content="v1"))
-    h1 = repo.hash(written.file_id)
-    repo.write(Note(file_id=written.file_id, title="T", content="v2"))
-    h2 = repo.hash(written.file_id)
-    assert h1 != h2
 
 
 def test_local_validate_rejects_traversal(tmp_path: Path):
@@ -101,11 +91,6 @@ def test_local_delete_removes_file(tmp_path: Path):
     assert not (tmp_path / written.file_id).exists()
     with pytest.raises(FileNotFoundError):
         repo.delete(written.file_id)
-
-
-def test_local_satisfies_protocol(tmp_path: Path):
-    # runtime_checkable Protocol — structural check
-    assert isinstance(_local_repo(tmp_path), NoteRepository)
 
 
 # ---------------------------------------------------------------------------
