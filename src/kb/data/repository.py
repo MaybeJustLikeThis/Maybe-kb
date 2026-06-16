@@ -7,9 +7,12 @@ adding a new implementation class; core layers are untouched.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from kb.data.models import Note
+
+if TYPE_CHECKING:
+    from kb.core.config import KBConfig
 
 
 @runtime_checkable
@@ -46,3 +49,21 @@ class NoteRepository(Protocol):
     def supports_write(self) -> bool:
         """Whether write/delete work (read-only backends -> False)."""
         ...
+
+
+def create_repository(config: "KBConfig", vault: Path) -> NoteRepository:
+    """Factory: build a NoteRepository from config.repository.provider.
+
+    Single backend today; dispatching here means adding a second backend
+    only touches this function, not context.py.
+    """
+    from kb.data.local_repository import LocalMarkdownRepository
+
+    provider = config.repository.provider
+    if provider == "local":
+        return LocalMarkdownRepository(
+            vault,
+            notes_dir=config.general.notes_dir,
+            attachments_dir=config.general.attachments_dir,
+        )
+    raise ValueError(f"Unknown repository provider: {provider!r}")

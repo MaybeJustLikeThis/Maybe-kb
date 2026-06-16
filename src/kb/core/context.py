@@ -8,8 +8,7 @@ from kb.core.config import KBConfig
 from kb.core.open_targets import OpenTargetStrategy, create_open_target
 from kb.data.database import Database
 from kb.data.embedding import EmbeddingProvider, create_embedding_provider
-from kb.data.local_repository import LocalMarkdownRepository
-from kb.data.repository import NoteRepository
+from kb.data.repository import NoteRepository, create_repository
 from kb.data.llm import LLMProvider, create_llm_provider
 from kb.data.vector import VectorStore
 
@@ -85,11 +84,7 @@ class AppContext:
 
         vector_store = VectorStore(index_path / "vectors.lance")
 
-        repo = LocalMarkdownRepository(
-            vault,
-            notes_dir=config.general.notes_dir,
-            attachments_dir=config.general.attachments_dir,
-        )
+        repo = create_repository(config, vault)
         open_target = create_open_target(config)
 
         return cls(

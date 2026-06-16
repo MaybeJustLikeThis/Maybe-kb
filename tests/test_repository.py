@@ -1,50 +1,16 @@
-"""NoteRepository contract tests + in-memory FakeRepository for core-layer tests."""
+"""NoteRepository contract tests (FakeRepository lives in tests/_fakes.py)."""
 from __future__ import annotations
 
-import hashlib
-from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
+from kb.core.config import KBConfig, RepositoryConfig
+from kb.data.local_repository import LocalMarkdownRepository
 from kb.data.models import Note
-from kb.data.repository import NoteRepository
+from kb.data.repository import NoteRepository, create_repository
 
-
-class FakeRepository:
-    """In-memory NoteRepository — lets core-layer tests run without a filesystem."""
-
-    def __init__(self) -> None:
-        self._notes: dict[str, Note] = {}
-
-    @property
-    def supports_write(self) -> bool:
-        return True
-
-    def discover(self) -> list[str]:
-        return sorted(self._notes)
-
-    def read(self, file_id: str) -> Note:
-        if file_id not in self._notes:
-            raise FileNotFoundError(file_id)
-        return self._notes[file_id]
-
-    def write(self, note: Note) -> Note:
-        file_id = note.file_id or f"notes/{note.title.strip() or 'untitled'}.md"
-        digest = hashlib.sha256(note.content.encode("utf-8")).hexdigest()
-        committed = replace(note, file_id=file_id, file_hash=digest)
-        self._notes[file_id] = committed
-        return committed
-
-    def delete(self, file_id: str) -> None:
-        if file_id not in self._notes:
-            raise FileNotFoundError(file_id)
-        del self._notes[file_id]
-
-    def hash(self, file_id: str) -> str:
-        return self.read(file_id).file_hash or ""
-
-    def validate(self, file_id: str) -> None:
-        return None
+from tests._fakes import FakeRepository
 
 
 def _make_note(file_id: str = "", title: str = "T", content: str = "body") -> Note:
@@ -84,11 +50,6 @@ def test_fake_hash_and_supports_write():
     assert repo.supports_write is True
     repo.write(_make_note(file_id="notes/h.md", content="abc"))
     assert repo.hash("notes/h.md")
-
-
-from pathlib import Path
-
-from kb.data.local_repository import LocalMarkdownRepository  # 尚不存在
 
 
 def _local_repo(tmp_path: Path) -> LocalMarkdownRepository:
@@ -145,3 +106,24 @@ def test_local_delete_removes_file(tmp_path: Path):
 def test_local_satisfies_protocol(tmp_path: Path):
     # runtime_checkable Protocol — structural check
     assert isinstance(_local_repo(tmp_path), NoteRepository)
+
+
+# ---------------------------------------------------------------------------
+# create_repository factory
+# ---------------------------------------------------------------------------
+
+
+def test_create_repository_local_returns_local_backend(tmp_path: Path):
+    cfg = KBConfig(vault_path=tmp_path)
+    repo = create_repository(cfg, tmp_path)
+    assert isinstance(repo, LocalMarkdownRepository)
+    assert isinstance(repo, NoteRepository)
+
+
+def test_create_repository_unknown_provider_raises(tmp_path: Path):
+    cfg = KBConfig(
+        vault_path=tmp_path,
+        repository=RepositoryConfig(provider="bogus"),
+    )
+    with pytest.raises(ValueError, match="Unknown repository provider"):
+        create_repository(cfg, tmp_path)
