@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from kb.data.database import Database
-from kb.data.embedding import EmbeddingProvider, EmbeddingResult
+from kb.data.embedding import EmbeddingProvider
 from kb.data.local_repository import LocalMarkdownRepository
 from kb.data.vector import VectorRecord
 from kb.core.config import GeneralConfig, KBConfig
@@ -14,7 +14,7 @@ from kb.core.context import AppContext
 from kb.data.models import Note
 from kb.core.indexer import index_files, index_vectors
 
-from tests._fakes import FakeRepository
+from tests._fakes import FakeEmbeddingProvider, FakeRepository, FakeVectorStore
 
 
 def _repo(vault: Path, *, notes_dir: str = "notes", attachments_dir: str = "attachments") -> LocalMarkdownRepository:
@@ -24,51 +24,6 @@ def _repo(vault: Path, *, notes_dir: str = "notes", attachments_dir: str = "atta
         notes_dir=notes_dir,
         attachments_dir=attachments_dir,
     )
-
-
-class FakeEmbeddingProvider(EmbeddingProvider):
-    """Deterministic embedding provider for indexer tests."""
-
-    def embed(self, text: str) -> EmbeddingResult:
-        return EmbeddingResult(
-            vector=[float(len(text)), 1.0, 0.0],
-            dimension=3,
-            tokens_used=len(text),
-        )
-
-    def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        return [self.embed(text) for text in texts]
-
-    @property
-    def dimension(self) -> int:
-        return 3
-
-
-class FakeVectorStore:
-    """In-memory stand-in for VectorStore."""
-
-    def __init__(self) -> None:
-        self.records: dict[str, list[VectorRecord]] = {}
-        self.deleted: list[str] = []
-        self.closed = False
-
-    def upsert_chunks(self, file_id: str, chunks: list[VectorRecord]) -> None:
-        self.records[file_id] = list(chunks)
-
-    def delete_note(self, file_id: str) -> None:
-        self.deleted.append(file_id)
-        self.records.pop(file_id, None)
-
-    def close(self) -> None:
-        self.closed = True
-
-
-@pytest.fixture
-def db(tmp_path: Path) -> Database:
-    """Create a fresh database in tmp."""
-    db_path = tmp_path / ".kb" / "kb.db"
-    db_path.parent.mkdir(parents=True)
-    return Database(db_path)
 
 
 def test_create_tables(db: Database):
@@ -246,7 +201,7 @@ def test_index_files_indexes_only_configured_notes_dir(db: Database, tmp_path: P
     custom_note.parent.mkdir()
     custom_note.write_text("# Included\n", encoding="utf-8")
     default_note = vault / "notes" / "ignored.md"
-    default_note.parent.mkdir()
+    default_note.parent.mkdir(exist_ok=True)
     default_note.write_text("# Ignored\n", encoding="utf-8")
     db.initialize()
 
