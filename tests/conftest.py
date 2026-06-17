@@ -23,11 +23,16 @@ def vault(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def db(vault: Path) -> Database:
-    """Initialized Database at vault/.kb/kb.db (function-scoped)."""
+def db(vault: Path):
+    """Initialized Database at vault/.kb/kb.db (function-scoped, closed after).
+
+    Closing the handle keeps the canonical pattern clean for the ~30 sites
+    that inherit it, and lets Windows reclaim the tmp sqlite file promptly.
+    """
     database = Database(vault / ".kb" / "kb.db")
     database.initialize()
-    return database
+    yield database
+    database.close()
 
 
 @pytest.fixture
