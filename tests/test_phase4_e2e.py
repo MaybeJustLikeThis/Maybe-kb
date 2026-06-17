@@ -222,14 +222,7 @@ def test_mcp_rag_query_returns_answer(monkeypatch: pytest.MonkeyPatch):
     from kb.core.config import KBConfig
     from kb.mcp_server import create_mcp_server
 
-    # Local subclass: assertion pins tokens_used=5, which FakeLLM can't express
-    # (canonical returns tokens_used=0). Override only generate(); inherit the rest.
-    class McpFakeLLM(FakeLLM):
-        def generate(self, prompt, *, system_prompt=""):
-            self.recorded_prompts.append(prompt)
-            return LLMResponse(text="MCP answer", tokens_used=5, model=self.model_name)
-
-    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: McpFakeLLM(response_text="MCP answer", model="mock"))
+    monkeypatch.setattr("kb.core.context.create_llm_provider", lambda c: FakeLLM(response_text="MCP answer", model="mock", tokens_used=5))
     monkeypatch.setattr("kb.core.context.create_embedding_provider", lambda c: FakeEmbeddingProvider(dimension=512))
 
     config = KBConfig(vault_path=Path("/tmp/mcp-rag-test"))

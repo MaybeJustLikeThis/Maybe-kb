@@ -43,6 +43,13 @@ def test_fake_llm_generate_raises_when_configured():
         llm.generate("p")
 
 
+def test_fake_llm_tokens_used_is_configurable():
+    llm = FakeLLM(tokens_used=7)
+    assert llm.generate("p").tokens_used == 7
+    chunks = list(llm.generate_stream("p"))
+    assert all(c.tokens_used == 7 for c in chunks)
+
+
 def test_fake_llm_stream_yields_chunks():
     llm = FakeLLM(stream_chunks=["foo", " bar"])
     chunks = list(llm.generate_stream("p"))

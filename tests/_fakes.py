@@ -75,6 +75,7 @@ class FakeLLM(LLMProvider):
     response_text: returned by generate() and (by default) each stream chunk.
     stream_chunks: if given, generate_stream yields these as separate chunks.
     raises: exception instance or class; generate/generate_stream raise it.
+    tokens_used: value reported on each LLMResponse (default 0).
     """
 
     def __init__(
@@ -84,11 +85,13 @@ class FakeLLM(LLMProvider):
         stream_chunks: list[str] | None = None,
         raises: BaseException | type[BaseException] | None = None,
         model: str = "fake-llm",
+        tokens_used: int = 0,
     ) -> None:
         self._response_text = response_text
         self._stream_chunks = stream_chunks
         self._raises = raises
         self._model = model
+        self._tokens_used = tokens_used
         self.recorded_prompts: list[str] = []
 
     def _maybe_raise(self) -> None:
@@ -98,14 +101,14 @@ class FakeLLM(LLMProvider):
     def generate(self, prompt: str, *, system_prompt: str = "") -> LLMResponse:
         self.recorded_prompts.append(prompt)
         self._maybe_raise()
-        return LLMResponse(text=self._response_text, tokens_used=0, model=self._model)
+        return LLMResponse(text=self._response_text, tokens_used=self._tokens_used, model=self._model)
 
     def generate_stream(self, prompt: str, *, system_prompt: str = ""):
         self.recorded_prompts.append(prompt)
         self._maybe_raise()
         chunks = self._stream_chunks if self._stream_chunks is not None else [self._response_text]
         for c in chunks:
-            yield LLMResponse(text=c, tokens_used=0, model=self._model)
+            yield LLMResponse(text=c, tokens_used=self._tokens_used, model=self._model)
 
     @property
     def model_name(self) -> str:
