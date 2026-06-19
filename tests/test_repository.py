@@ -112,3 +112,39 @@ def test_create_repository_unknown_provider_raises(tmp_path: Path):
     )
     with pytest.raises(ValueError, match="Unknown repository provider"):
         create_repository(cfg, tmp_path)
+
+
+def test_local_repository_discovers_notes_when_notes_dir_is_vault_root(
+    tmp_path: Path,
+):
+    tmp_path.joinpath("root.md").write_text("# Root\n", encoding="utf-8")
+    tmp_path.joinpath(".kb").mkdir()
+    tmp_path.joinpath(".kb", "ignored.md").write_text("# Ignore\n", encoding="utf-8")
+    tmp_path.joinpath("attachments").mkdir()
+    tmp_path.joinpath("attachments", "ignored.md").write_text(
+        "# Ignore\n",
+        encoding="utf-8",
+    )
+
+    repo = LocalMarkdownRepository(
+        tmp_path,
+        notes_dir=".",
+        attachments_dir="attachments",
+    )
+
+    assert repo.discover() == ["root.md"]
+
+
+def test_local_repository_allocates_new_note_inside_vault_root_when_notes_dir_is_dot(
+    tmp_path: Path,
+):
+    repo = LocalMarkdownRepository(
+        tmp_path,
+        notes_dir=".",
+        attachments_dir="attachments",
+    )
+
+    saved = repo.write(Note(file_id="", title="Hello World", content="Body"))
+
+    assert saved.file_id == "未分类/hello-world.md"
+    assert tmp_path.joinpath("未分类", "hello-world.md").is_file()
