@@ -56,10 +56,19 @@ def test_first_use_docs_keep_core_positioning_and_trust_entry() -> None:
         assert "本地优先" in text
         assert "System Health" in text
         assert "系统健康" in text
-        assert "kb init" in text
-        assert "kb index --full" in text
+        assert "kb setup" in text
         assert "kb serve" in text
+        assert "不会修改原始笔记" in text
+        assert "高级配置" in text
         assert "博客" in text
         assert "Agent 沉淀" in text
         assert "手动录入" in text
         assert "未分类" in text
+
+
+def test_readme_quick_start_prefers_setup_over_manual_config() -> None:
+    readme = read("README.md")
+    quick_start = readme.split("## 快速开始", 1)[1].split("##", 1)[0]
+
+    assert "kb setup" in quick_start
+    assert "config.toml" not in quick_start

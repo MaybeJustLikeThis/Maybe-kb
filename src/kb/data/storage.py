@@ -229,11 +229,23 @@ def discover_notes(vault_path: Path, notes_dir: str = "notes") -> list[Path]:
         return []
 
     discovered: list[Path] = []
+    ignored_root_names = {".kb", ".obsidian", "attachments"}
     for ext in ("*.md", "*.pdf"):
         for path in notes_path.rglob(ext):
             resolved = path.resolve()
-            if resolved.is_relative_to(vault_root) and resolved.is_relative_to(notes_root):
-                discovered.append(path)
+            if not (
+                resolved.is_relative_to(vault_root)
+                and resolved.is_relative_to(notes_root)
+            ):
+                continue
+            relative = resolved.relative_to(vault_root)
+            if (
+                notes_dir == "."
+                and relative.parts
+                and relative.parts[0] in ignored_root_names
+            ):
+                continue
+            discovered.append(path)
     return sorted(discovered)
 
 

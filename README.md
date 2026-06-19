@@ -23,20 +23,14 @@
 ## 快速开始
 
 ```bash
-# 安装
 pip install -e .
-
-# 初始化项目结构
-kb init
-
-# 全量建索引
-kb index --full
-
-# 启动 Web 服务
+kb setup
 kb serve
 ```
 
-打开 `http://127.0.0.1:8420`，在 Overview 的 **System Health** 查看 vault、索引、embedding、LLM 等组件是否就绪。
+`kb setup` 会让你三选一：连接 Obsidian vault、连接已有 Markdown 文件夹，或创建一个新的空知识库。建立搜索数据只会生成本地 `.kb/` 索引文件，不会修改原始笔记。
+
+打开 `http://127.0.0.1:8420`，在 Overview 的 **System Health** 查看系统健康：notes 表示已读取的笔记数量，vectors 表示语义搜索数据，coverage 表示有多少笔记已准备好用于智能搜索和 Chat。
 
 ### macOS / Linux 一键启动
 
@@ -127,9 +121,9 @@ pip install -e ".[dev]"          # 开发依赖（pytest、pytest-cov）
 - **RAG 问答**：检索 → 上下文拼接（6000 字符预算）→ LLM 生成回答
 - **评估框架**：内置 `kb eval`，支持 hit rate、MRR、keyword coverage、LLM judge，可做 baseline 对比和回归检测
 
-## 配置
+## 高级配置
 
-编辑项目根目录下的 `config.toml`：
+普通用户优先使用 `kb setup`。只有当你需要改端口、模型、来源标签、Obsidian 打开方式等高级选项时，再编辑项目根目录下的 `config.toml`：
 
 ```toml
 [general]

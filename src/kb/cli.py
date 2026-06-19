@@ -9,6 +9,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import typer
 from rich.console import Console
@@ -19,6 +20,7 @@ from kb.core.config_writer import render_toml_sections, write_toml_text
 from kb.core.context import AppContext
 from kb.core.import_file import ImportFileError
 from kb.core.indexer import index_files
+from kb.core.setup import SetupError, SetupRequest, apply_setup_plan, build_setup_plan
 from kb.data.storage import parse_markdown_file
 from kb.core import services
 from kb.core.eval import EvalEngine, load_dataset, filter_queries, compare_results
@@ -59,6 +61,97 @@ def _index_context(ctx: AppContext, *, full: bool) -> tuple[int, int]:
         vault=ctx.vault,
         index_dir=ctx.index_dir,
     )
+
+
+@app.command()
+def setup(
+    mode: Literal["obsidian", "markdown", "new"] | None = typer.Option(
+        None,
+        "--mode",
+        help="Setup mode: obsidian, markdown, or new",
+    ),
+    path: Path | None = typer.Option(
+        None,
+        "--path",
+        help="Vault or note folder path",
+    ),
+    skip_index: bool = typer.Option(
+        False,
+        "--skip-index",
+        help="Skip building search data after setup",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Apply the generated setup plan without confirmation",
+    ),
+):
+    """Connect notes and write first-run configuration."""
+    selected_mode = mode
+    if selected_mode is None:
+        console.print("What do you want to connect?")
+        console.print("1. Obsidian vault")
+        console.print("2. Markdown folder")
+        console.print("3. New empty vault")
+        choice = typer.prompt("Choose 1, 2, or 3", default="1")
+        selected_mode = {"1": "obsidian", "2": "markdown", "3": "new"}.get(choice)
+        if selected_mode is None:
+            console.print("[red]Choose 1, 2, or 3.[/red]")
+            raise typer.Exit(1)
+
+    selected_path = path
+    if selected_path is None:
+        label = "Path"
+        if selected_mode == "obsidian":
+            label = "Obsidian vault path"
+        elif selected_mode == "markdown":
+            label = "Markdown folder path"
+        else:
+            label = "New vault path"
+        selected_path = Path(typer.prompt(label, default="kb-vault"))
+
+    try:
+        plan = build_setup_plan(
+            SetupRequest(
+                project_path=Path.cwd(),
+                mode=selected_mode,
+                source_path=selected_path,
+                build_index=not skip_index,
+            )
+        )
+    except SetupError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    console.print("\n[bold]Setup plan[/bold]")
+    console.print(f"Mode: {plan.mode}")
+    console.print(f"Vault: {plan.vault_path}")
+    console.print(f"Notes scope: {plan.notes_dir}")
+    console.print(f"Attachments: {plan.vault_path / plan.attachments_dir}")
+    console.print(f"Search data: {'skip for now' if skip_index else 'build now'}")
+    console.print("Original notes will not be modified.")
+    for warning in plan.warnings:
+        console.print(f"[yellow]Warning: {warning}[/yellow]")
+
+    if not yes and not typer.confirm("Apply this setup?", default=True):
+        raise typer.Abort()
+
+    try:
+        result = apply_setup_plan(plan, build_index=not skip_index)
+    except Exception as exc:
+        console.print(f"[red]Setup failed: {exc}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[green]Connected vault:[/green] {result.plan.vault_path}")
+    if result.indexed_notes is not None:
+        console.print(
+            f"[green]Search data built:[/green] "
+            f"{result.indexed_notes} notes, {result.indexed_vectors} vectors"
+        )
+    else:
+        console.print("[yellow]Search data skipped. Run kb index --full when ready.[/yellow]")
+    console.print("Next: run [bold]kb serve[/bold], then open Overview and check System Health.")
 
 
 @app.command()

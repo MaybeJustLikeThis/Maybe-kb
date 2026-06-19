@@ -3,6 +3,7 @@ notes/
 __pycache__/
 *.pyc
 .pytest_cache/
+.tmp-pytest*/
 *.egg-info/
 dist/
 build/

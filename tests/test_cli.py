@@ -758,3 +758,75 @@ def test_kb_mcp_path_loads_project_config(kb_dir: Path, monkeypatch: pytest.Monk
 
     assert result.exit_code == 0, result.output
     assert configs[0].vault_path == vault.resolve()
+
+
+def test_kb_setup_markdown_noninteractive(kb_dir: Path):
+    source = kb_dir / "existing-notes"
+    source.mkdir()
+    source.joinpath("note.md").write_text("# Note\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["setup", "--mode", "markdown", "--path", str(source), "--skip-index", "--yes"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "kb serve" in result.output
+    assert "Original notes will not be modified" in result.output
+    data = tomllib.loads(kb_dir.joinpath("config.toml").read_text(encoding="utf-8"))
+    assert data["general"]["vault_path"] == source.resolve().as_posix()
+    assert data["general"]["notes_dir"] == "."
+    assert data["obsidian"]["enabled"] is False
+
+
+def test_kb_setup_obsidian_noninteractive(kb_dir: Path):
+    vault = kb_dir / "Obsidian Vault"
+    vault.mkdir()
+    vault.joinpath(".obsidian").mkdir()
+
+    result = runner.invoke(
+        app,
+        ["setup", "--mode", "obsidian", "--path", str(vault), "--skip-index", "--yes"],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = tomllib.loads(kb_dir.joinpath("config.toml").read_text(encoding="utf-8"))
+    assert data["general"]["vault_path"] == vault.resolve().as_posix()
+    assert data["general"]["notes_dir"] == "."
+    assert data["obsidian"]["enabled"] is True
+    assert data["obsidian"]["vault_name"] == "Obsidian Vault"
+
+
+def test_kb_setup_new_noninteractive(kb_dir: Path):
+    target = kb_dir / "my-kb"
+
+    result = runner.invoke(
+        app,
+        ["setup", "--mode", "new", "--path", str(target), "--skip-index", "--yes"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert target.joinpath("notes").is_dir()
+    assert target.joinpath("attachments").is_dir()
+    data = tomllib.loads(kb_dir.joinpath("config.toml").read_text(encoding="utf-8"))
+    assert data["general"]["vault_path"] == target.resolve().as_posix()
+    assert data["general"]["notes_dir"] == "notes"
+
+
+def test_kb_setup_rejects_missing_path(kb_dir: Path):
+    result = runner.invoke(
+        app,
+        [
+            "setup",
+            "--mode",
+            "markdown",
+            "--path",
+            str(kb_dir / "missing"),
+            "--skip-index",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Source directory not found" in result.output
+    assert not kb_dir.joinpath("config.toml").exists()
